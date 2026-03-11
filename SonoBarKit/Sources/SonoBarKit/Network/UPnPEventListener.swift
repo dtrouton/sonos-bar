@@ -100,10 +100,16 @@ public typealias EventCallback = @Sendable (SonosService, [String: String]) -> V
 public final class UPnPEventListener: @unchecked Sendable {
 
     /// The TCP port the listener is running on, or nil if not started.
-    public private(set) var port: UInt16?
+    public var port: UInt16? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _port
+    }
 
-    private var listener: NWListener?
-    private var onEvent: EventCallback?
+    private var _port: UInt16?
+    private var _listener: NWListener?
+    private var _onEvent: EventCallback?
+    private let lock = NSLock()
     private let queue = DispatchQueue(label: "com.sonobar.eventlistener", qos: .userInitiated)
 
     public init() {}
@@ -122,7 +128,9 @@ public final class UPnPEventListener: @unchecked Sendable {
     /// - Parameter onEvent: Closure called when an event notification is received.
     /// - Throws: If no port could be bound after 5 attempts.
     public func start(onEvent: @escaping EventCallback) async throws {
-        self.onEvent = onEvent
+        lock.lock()
+        self._onEvent = onEvent
+        lock.unlock()
 
         var lastError: Error?
         for _ in 0..<5 {
@@ -138,9 +146,13 @@ public final class UPnPEventListener: @unchecked Sendable {
 
     /// Stops the HTTP listener and cancels all connections.
     public func stop() {
-        listener?.cancel()
-        listener = nil
-        port = nil
+        lock.lock()
+        let currentListener = _listener
+        _listener = nil
+        _port = nil
+        _onEvent = nil
+        lock.unlock()
+        currentListener?.cancel()
     }
 
     // MARK: - Private
@@ -178,7 +190,9 @@ public final class UPnPEventListener: @unchecked Sendable {
                 case .ready:
                     if guard_.tryResume() {
                         if let nwPort = nwListener.port {
-                            self?.port = nwPort.rawValue
+                            self?.lock.lock()
+                            self?._port = nwPort.rawValue
+                            self?.lock.unlock()
                         }
                         continuation.resume()
                     }
@@ -199,7 +213,9 @@ public final class UPnPEventListener: @unchecked Sendable {
                 self?.handleConnection(connection)
             }
 
-            self.listener = nwListener
+            self.lock.lock()
+            self._listener = nwListener
+            self.lock.unlock()
             nwListener.start(queue: self.queue)
         }
     }
@@ -247,7 +263,10 @@ public final class UPnPEventListener: @unchecked Sendable {
         // Parse the event XML body
         guard !body.isEmpty else { return }
         if let properties = try? XMLResponseParser.parseEventBody(body) {
-            onEvent?(service, properties)
+            lock.lock()
+            let callback = _onEvent
+            lock.unlock()
+            callback?(service, properties)
         }
     }
 

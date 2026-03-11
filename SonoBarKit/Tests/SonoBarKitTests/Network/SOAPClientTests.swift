@@ -1,6 +1,26 @@
 import Testing
 @testable import SonoBarKit
 
+// MARK: - URLRequestSnapshot (test helper)
+
+struct URLRequestSnapshot: Sendable {
+    let urlString: String
+    let method: String
+    let contentType: String?
+    let soapAction: String?
+    let timeout: TimeInterval
+    let bodyString: String?
+
+    init(_ request: URLRequest) {
+        self.urlString = request.url?.absoluteString ?? ""
+        self.method = request.httpMethod ?? "GET"
+        self.contentType = request.value(forHTTPHeaderField: "Content-Type")
+        self.soapAction = request.value(forHTTPHeaderField: "SOAPACTION")
+        self.timeout = request.timeoutInterval
+        self.bodyString = request.httpBody.flatMap { String(data: $0, encoding: .utf8) }
+    }
+}
+
 // MARK: - MockHTTPClient
 
 final class MockHTTPClient: HTTPClientProtocol, @unchecked Sendable {

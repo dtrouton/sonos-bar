@@ -6,32 +6,6 @@
 
 import Foundation
 
-// MARK: - URLRequestSnapshot
-
-/// A simple value-type snapshot of a URLRequest for test inspection
-/// without requiring Foundation import in test files.
-public struct URLRequestSnapshot: Sendable {
-    public let urlString: String
-    public let method: String
-    public let contentType: String?
-    public let soapAction: String?
-    public let timeout: TimeInterval
-    public let bodyString: String?
-
-    public init(_ request: URLRequest) {
-        self.urlString = request.url?.absoluteString ?? ""
-        self.method = request.httpMethod ?? "GET"
-        self.contentType = request.value(forHTTPHeaderField: "Content-Type")
-        self.soapAction = request.value(forHTTPHeaderField: "SOAPACTION")
-        self.timeout = request.timeoutInterval
-        if let body = request.httpBody {
-            self.bodyString = String(data: body, encoding: .utf8)
-        } else {
-            self.bodyString = nil
-        }
-    }
-}
-
 // MARK: - HTTPClientProtocol
 
 /// Abstraction over HTTP transport for testability.
@@ -115,8 +89,19 @@ public final class SOAPClient: Sendable {
         request.timeoutInterval = 5
         request.httpBody = body.data(using: .utf8)
 
-        let (data, _) = try await httpClient.send(request)
+        let (data, httpResponse) = try await httpClient.send(request)
         let responseXML = String(data: data, encoding: .utf8) ?? ""
-        return try XMLResponseParser.parse(responseXML)
+
+        // Parse XML first — SOAP faults come as 500 with a fault envelope
+        let parsed = try XMLResponseParser.parse(responseXML)
+
+        // If parsing succeeded but HTTP status is non-2xx and non-500
+        // (500 is handled by XMLResponseParser via SOAP faults)
+        if httpResponse.statusCode < 200 || httpResponse.statusCode >= 300,
+           httpResponse.statusCode != 500 {
+            throw SOAPError(code: httpResponse.statusCode, message: "HTTP \(httpResponse.statusCode)")
+        }
+
+        return parsed
     }
 }
