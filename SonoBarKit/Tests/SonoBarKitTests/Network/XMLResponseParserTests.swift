@@ -73,7 +73,7 @@ struct XMLResponseParserTests {
             try XMLResponseParser.parse(xml)
         }
         do {
-            try XMLResponseParser.parse(xml)
+            _ = try XMLResponseParser.parse(xml)
         } catch let soapError as SOAPError {
             #expect(soapError.code == 701)
         } catch {

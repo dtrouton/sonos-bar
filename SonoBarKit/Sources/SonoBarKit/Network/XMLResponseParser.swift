@@ -12,11 +12,11 @@ public struct SOAPError: Error, Sendable {
     /// The UPnP error code (e.g. 701 = Transition Not Available)
     public let code: Int
     /// Human-readable fault string from the device
-    public let description: String
+    public let message: String
 
-    public init(code: Int, description: String = "") {
+    public init(code: Int, message: String = "") {
         self.code = code
-        self.description = description
+        self.message = message
     }
 }
 
@@ -33,12 +33,14 @@ public enum XMLResponseParser {
     /// Throws `SOAPError` if the body contains a `s:Fault` element.
     public static func parse(_ xml: String) throws -> [String: String] {
         guard let data = xml.data(using: .utf8) else {
-            throw SOAPError(code: -1, description: "Failed to encode XML as UTF-8")
+            throw SOAPError(code: -1, message: "Failed to encode XML as UTF-8")
         }
         let delegate = SOAPResponseDelegate()
         let parser = XMLParser(data: data)
         parser.delegate = delegate
-        parser.parse()
+        guard parser.parse() else {
+            throw parser.parserError ?? SOAPError(code: -1, message: "XML parse failed")
+        }
 
         if let fault = delegate.fault {
             throw fault
@@ -52,13 +54,15 @@ public enum XMLResponseParser {
     /// of attribute name → val for each child element of the first `InstanceID` element.
     public static func parseEventBody(_ xml: String) throws -> [String: String] {
         guard let data = xml.data(using: .utf8) else {
-            throw SOAPError(code: -1, description: "Failed to encode event XML as UTF-8")
+            throw SOAPError(code: -1, message: "Failed to encode event XML as UTF-8")
         }
         // Step 1: extract the raw LastChange text from the property set
         let propDelegate = EventPropertyDelegate()
         let propParser = XMLParser(data: data)
         propParser.delegate = propDelegate
-        propParser.parse()
+        guard propParser.parse() else {
+            throw propParser.parserError ?? SOAPError(code: -1, message: "Event XML parse failed")
+        }
 
         guard let lastChangeXML = propDelegate.lastChangeValue, !lastChangeXML.isEmpty else {
             return [:]
@@ -66,12 +70,14 @@ public enum XMLResponseParser {
 
         // Step 2: parse the inner (HTML-decoded) LastChange XML
         guard let innerData = lastChangeXML.data(using: .utf8) else {
-            throw SOAPError(code: -1, description: "Failed to encode LastChange XML as UTF-8")
+            throw SOAPError(code: -1, message: "Failed to encode LastChange XML as UTF-8")
         }
         let lcDelegate = LastChangeDelegate()
         let lcParser = XMLParser(data: innerData)
         lcParser.delegate = lcDelegate
-        lcParser.parse()
+        guard lcParser.parse() else {
+            throw lcParser.parserError ?? SOAPError(code: -1, message: "LastChange XML parse failed")
+        }
 
         return lcDelegate.result
     }
@@ -167,7 +173,7 @@ private final class SOAPResponseDelegate: NSObject, XMLParserDelegate {
             inResponseElement = false
         }
         if inFault && localName == "Fault" {
-            fault = SOAPError(code: errorCode, description: faultString)
+            fault = SOAPError(code: errorCode, message: faultString)
             inFault = false
         }
         if localName == "Body" {

@@ -46,7 +46,7 @@ public enum SOAPEnvelope {
         orderedParams: [(String, String)]
     ) -> String {
         let paramXML = orderedParams
-            .map { "<\($0.0)>\($0.1)</\($0.0)>" }
+            .map { "<\($0.0)>\(xmlEscape($0.1))</\($0.0)>" }
             .joined(separator: "\n      ")
 
         return """
@@ -59,5 +59,13 @@ public enum SOAPEnvelope {
           </s:Body>
         </s:Envelope>
         """
+    }
+
+    private static func xmlEscape(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
     }
 }
