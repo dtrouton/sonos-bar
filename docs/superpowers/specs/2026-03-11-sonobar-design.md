@@ -66,6 +66,22 @@ Three layers:
 - Auto-renews subscriptions before the 30-minute expiry
 - Eliminates polling — the app reacts to changes within milliseconds
 
+## Error Handling
+
+- **Speaker unreachable:** Gray out the room in the Room Switcher, show an inline "Unreachable" status. Continue attempting SSDP discovery to detect when it comes back.
+- **SOAP call failure:** Show a brief toast/banner in the popover (e.g., "Couldn't change volume — speaker not responding"). Do not block the UI. Retry once automatically after 2 seconds.
+- **Zero speakers discovered:** Show a friendly empty state in the Room Switcher: "No Sonos speakers found on this network" with a manual refresh button.
+- **Event listener port conflict:** Try up to 5 random ports. If all fail, fall back to polling at 3-second intervals (degraded mode).
+- **General philosophy:** Never block the UI. Show stale data with a visual indicator rather than a loading spinner. Fail gracefully and recover automatically when possible.
+
+## Data Persistence
+
+- **Active room selection:** Persisted in `UserDefaults`. Restored on launch, validated against discovered speakers.
+- **Last-seen speaker list:** Cached in `UserDefaults`. Shown immediately on launch (grayed out) while SSDP discovery runs, so the UI is never empty on startup.
+- **Album art cache:** On-disk cache in `~/Library/Caches/SonoBar/artwork/`. LRU eviction at 50MB.
+- **Global shortcut bindings:** Stored in `UserDefaults`.
+- **No database.** `UserDefaults` + file cache is sufficient for this scope.
+
 ## Service Layer
 
 ### DeviceManager
@@ -80,6 +96,7 @@ Three layers:
 - Wraps `AVTransport` and `RenderingControl` UPnP services
 - Playback: `play()`, `pause()`, `stop()`, `next()`, `previous()`, `seek(to:)`
 - Volume: `setVolume(_ level: Int, for:)` (0–100 scale), `setMute(_ muted: Bool, for:)`
+- Group volume: when the active speaker is a group coordinator, the volume slider controls the **group volume** via `GroupRenderingControl`. Individual member volumes are not exposed in the UI (matches official Sonos app behavior).
 - Subscribes to `AVTransport` events for now-playing metadata (title, artist, album, art URL, progress)
 - Album art fetched from `http://<ip>:1400/getaa?...` and cached locally
 
@@ -102,18 +119,24 @@ Three layers:
 ### GroupManager
 
 - Wraps `AVTransport` for group operations
-- `group(speakers:coordinator:)` — joins speakers into a group using `SetAVTransportURI`
-- `ungroup(speaker:)` — removes a speaker from its group via `BecomeCoordinatorOfStandaloneGroup`
+- `group(speakers:coordinator:)` — joins speakers by calling `SetAVTransportURI` with `x-rincon:<coordinator-uuid>` on each member speaker. The coordinator is the speaker whose queue/stream is shared.
+- `ungroup(speaker:)` — removes a speaker from its group via `BecomeCoordinatorOfStandaloneGroup` on the member speaker
 - Listens to `ZoneGroupTopology` events for real-time group changes
 
 ## UI Design
 
 Menu bar popover: ~320pt wide x ~450pt tall. Four tabs navigated via a bottom tab bar.
 
+### App Lifecycle
+
+- **LSUIElement = true** in Info.plist — no Dock icon, menu bar only
+- **Launch at login** via `SMAppService.mainApp.register()` (macOS 13+), toggled in a Preferences view
+- **Popover behavior:** Click icon to toggle open/close. Clicking outside the popover dismisses it (standard `NSPopover.Behavior.transient`). Escape key dismisses. Not detachable into a floating window.
+
 ### Menu Bar Icon
 
 - Speaker/music glyph in the macOS status bar via `NSStatusItem`
-- Click opens an `NSPopover` anchored to the icon
+- Click toggles an `NSPopover` anchored to the icon
 - Feels like a native macOS utility (similar to Wi-Fi or Bluetooth dropdowns)
 
 ### Now Playing (Default Tab)
@@ -136,9 +159,10 @@ Menu bar popover: ~320pt wide x ~450pt tall. Four tabs navigated via a bottom ta
 
 ### Browse
 
-- **Search bar** at top to filter favorites and playlists
-- **Sonos Favorites** — grid layout (3 columns) with artwork thumbnails, title, and service badge
-- **Sonos Playlists** — list below favorites
+- **Search bar** at top — client-side filtering of already-fetched favorites and playlists (no SOAP calls on each keystroke)
+- **Segmented control** below search: Favorites | Playlists | Queue — switches between the three content sections (all three do not fit simultaneously in a 450pt popover)
+- **Sonos Favorites** (default segment) — grid layout (3 columns) with artwork thumbnails, title, and service badge. Scrollable.
+- **Sonos Playlists** — list layout with artwork, title, track count
 - **Current Queue** — track list showing now-playing indicator, drag-to-reorder
 - Tap any item to play on the active room
 - Stretch: SMAPI service browser with hierarchical drill-down navigation
@@ -152,10 +176,17 @@ Menu bar popover: ~320pt wide x ~450pt tall. Four tabs navigated via a bottom ta
 
 ### Global Keyboard Shortcuts
 
-Registered via `CGEvent` tap or media key handling:
-- Play/pause, next, previous
-- Volume up/down
-- Open/dismiss the popover
+- **Media keys** (play/pause, next, previous): Integrate via `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` so macOS routes media key events to SonoBar when it is the active "now playing" app. This avoids conflicts with Apple Music/Spotify and does not require Accessibility permissions.
+- **Sonos volume up/down:** Custom global hotkeys (configurable, e.g., Option+Up/Down) registered via `NSEvent.addGlobalMonitorForEvents`. These control the active Sonos room's volume, not Mac system volume.
+- **Toggle popover:** Custom global hotkey (configurable, e.g., Option+S).
+- Requires Accessibility permission only if using `CGEvent` tap fallback (avoided by default).
+
+### Accessibility
+
+- Standard SwiftUI accessibility labels on all controls
+- VoiceOver support for transport controls, volume slider (announces numeric value), room list
+- Keyboard navigation within the popover via Tab/arrow keys
+- Respects system "Reduce Motion" preference for any animations
 
 ## Content Access Strategy
 
@@ -186,6 +217,32 @@ All accessible via Sonos Favorites at minimum. Direct browsing via SMAPI is a st
 - **No Swift Sonos library exists** — we build the UPnP layer from scratch using Foundation networking and the community-maintained API docs at sonos.svrooij.io
 - **Event subscription requires a local HTTP server** — the app runs a lightweight listener for UPnP event callbacks
 - **macOS sandbox considerations** — the app needs local network access (com.apple.security.network.client and com.apple.security.network.server entitlements)
+
+## Phasing
+
+### Phase 1 — MVP
+- Network layer (SSDP discovery, SOAP client, UPnP event listener)
+- DeviceManager (discover speakers, track groups, select active room)
+- PlaybackController (play/pause/skip/seek, volume 0–100, now-playing metadata, album art)
+- GroupManager (group/ungroup rooms)
+- Now Playing tab (full transport controls, room selector, volume with numeric display)
+- Room Switcher tab (room list with status, tap to switch)
+- Menu bar icon, popover lifecycle, launch-at-login
+- Global media key integration via MPNowPlayingInfoCenter
+- Data persistence (active room, speaker cache, art cache)
+- Error handling (unreachable speakers, empty state, graceful degradation)
+
+### Phase 2 — Content & Scheduling
+- ContentBrowser (Sonos Favorites, Sonos Playlists, queue management)
+- Browse tab (favorites grid, playlists list, queue with reorder, search filter)
+- AlarmScheduler (list/create/update/delete alarms, sleep timer)
+- Alarms tab (alarm list with toggles, add alarm form, sleep timer buttons)
+- Custom global hotkeys for Sonos volume and popover toggle
+
+### Phase 3 — Stretch
+- SMAPI catalog browsing for Apple Music, Audible, Plex, BBC Sounds
+- Hierarchical service browser in Browse tab
+- Drag-to-reorder in queue
 
 ## Out of Scope
 
