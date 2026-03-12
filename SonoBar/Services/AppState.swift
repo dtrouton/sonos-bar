@@ -143,4 +143,113 @@ final class AppState {
         }
         activeController = PlaybackController(client: SOAPClient(host: ip))
     }
+
+    private var activeClient: SOAPClient? {
+        guard let device = deviceManager.activeDevice,
+              let ip = deviceManager.coordinatorIP(for: device.uuid) else { return nil }
+        return SOAPClient(host: ip)
+    }
+
+    // MARK: - Browse
+
+    var contentItems: [ContentItem] = []
+    var contentError: String? = nil
+
+    func browseFavorites() async {
+        contentError = nil
+        guard let client = activeClient else { return }
+        do {
+            contentItems = try await ContentBrowser.browseFavorites(client: client)
+        } catch {
+            contentError = "Failed to load favorites"
+        }
+    }
+
+    func browsePlaylists() async {
+        contentError = nil
+        guard let client = activeClient else { return }
+        do {
+            contentItems = try await ContentBrowser.browsePlaylists(client: client)
+        } catch {
+            contentError = "Failed to load playlists"
+        }
+    }
+
+    func browseQueue() async {
+        contentError = nil
+        guard let client = activeClient else { return }
+        do {
+            contentItems = try await ContentBrowser.browseQueue(client: client)
+        } catch {
+            contentError = "Failed to load queue"
+        }
+    }
+
+    func playItem(_ item: ContentItem) async {
+        guard let client = activeClient else { return }
+        do {
+            try await ContentBrowser.playItem(client: client, item: item)
+            await refreshPlayback()
+        } catch {
+            contentError = "Failed to play \(item.title)"
+        }
+    }
+
+    // MARK: - Alarms & Sleep Timer
+
+    var alarms: [SonosAlarm] = []
+    var sleepTimerRemaining: String? = nil
+
+    func fetchAlarms() async {
+        guard let client = activeClient else { return }
+        alarms = (try? await AlarmScheduler.listAlarms(client: client)) ?? []
+    }
+
+    func createAlarm(_ alarm: SonosAlarm) async {
+        guard let client = activeClient else { return }
+        try? await AlarmScheduler.createAlarm(client: client, alarm: alarm)
+        await fetchAlarms()
+    }
+
+    func toggleAlarm(_ alarm: SonosAlarm) async {
+        guard let client = activeClient else { return }
+        let toggled = SonosAlarm(
+            id: alarm.id,
+            startLocalTime: alarm.startLocalTime,
+            recurrence: alarm.recurrence,
+            roomUUID: alarm.roomUUID,
+            programURI: alarm.programURI,
+            programMetaData: alarm.programMetaData,
+            playMode: alarm.playMode,
+            volume: alarm.volume,
+            duration: alarm.duration,
+            enabled: !alarm.enabled,
+            includeLinkedZones: alarm.includeLinkedZones
+        )
+        try? await AlarmScheduler.updateAlarm(client: client, alarm: toggled)
+        await fetchAlarms()
+    }
+
+    func deleteAlarm(_ alarm: SonosAlarm) async {
+        guard let client = activeClient else { return }
+        try? await AlarmScheduler.deleteAlarm(client: client, id: alarm.id)
+        await fetchAlarms()
+    }
+
+    func setSleepTimer(minutes: Int) async {
+        guard let client = activeClient else { return }
+        try? await SleepTimerController.setSleepTimer(client: client, minutes: minutes)
+        await refreshSleepTimer()
+    }
+
+    func cancelSleepTimer() async {
+        guard let client = activeClient else { return }
+        try? await SleepTimerController.cancelSleepTimer(client: client)
+        sleepTimerRemaining = nil
+    }
+
+    func refreshSleepTimer() async {
+        guard let client = activeClient else { return }
+        sleepTimerRemaining = try? await SleepTimerController.getRemainingTime(client: client)
+    }
 }
