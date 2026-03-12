@@ -19,8 +19,7 @@ struct PopoverContentView: View {
                 case .rooms:
                     RoomSwitcherView()
                 case .browse:
-                    Text("Browse").frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .foregroundColor(.secondary)
+                    BrowseView()
                 case .alarms:
                     Text("Alarms").frame(maxWidth: .infinity, maxHeight: .infinity)
                         .foregroundColor(.secondary)
