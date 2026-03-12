@@ -1,10 +1,12 @@
 // SonoBar/AppDelegate.swift
 import AppKit
 import SwiftUI
+import SonoBarKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
+    private let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -19,7 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(
             rootView: PopoverContentView()
+                .environment(appState)
         )
+        Task { await appState.startDiscovery() }
     }
 
     @objc private func togglePopover() {

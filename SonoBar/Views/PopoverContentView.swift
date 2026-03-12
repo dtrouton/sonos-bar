@@ -1,16 +1,17 @@
 // SonoBar/Views/PopoverContentView.swift
 import SwiftUI
+import SonoBarKit
 
 enum Tab {
     case nowPlaying, rooms, browse, alarms
 }
 
 struct PopoverContentView: View {
+    @Environment(AppState.self) private var appState
     @State private var selectedTab: Tab = .nowPlaying
 
     var body: some View {
         VStack(spacing: 0) {
-            // Tab content
             Group {
                 switch selectedTab {
                 case .nowPlaying:
@@ -28,7 +29,6 @@ struct PopoverContentView: View {
 
             Divider()
 
-            // Tab bar
             HStack(spacing: 0) {
                 tabButton(tab: .nowPlaying, icon: "play.fill", label: "Now")
                 tabButton(tab: .rooms, icon: "house.fill", label: "Rooms")
