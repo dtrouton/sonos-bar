@@ -7,12 +7,18 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0080213543DD386C6C589E5B /* AlarmsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AE39ED123CAC10B8001B1C0 /* AlarmsView.swift */; };
 		0536F53032789CC218E34D83 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */; };
 		05EFD6FB44C4A9E5947EF6B9 /* VolumeSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBBDA7A4ABF3A635C1A6C887 /* VolumeSliderView.swift */; };
+		0AE327A9F07FDBF16E30CBCA /* AlarmFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B4BECB3532BB5092506158 /* AlarmFormView.swift */; };
 		0F33F3ED2BD864B9851AFB8D /* RoomSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */; };
 		14BF7B0AB69F913251D3FB97 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CAA9453A6C8F70A30772D34 /* SettingsStore.swift */; };
+		28806D365CEAE34308004FF2 /* MediaKeyController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5B929E0AF767FBF59460250 /* MediaKeyController.swift */; };
 		4689D6ADC8B48002E108A687 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800269C4C7C75C4A798728CF /* AppState.swift */; };
 		553D7BE3098C9639F29378D6 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */; };
+		5C29513A59EF5A02C0229FCD /* ContentGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12E5D60423F51E2C500E16A /* ContentGridView.swift */; };
+		64A86350DDACD5F98007D78A /* ContentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */; };
+		827BD66207075FB6075E8145 /* BrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB389F9F52B80716CD445D77 /* BrowseView.swift */; };
 		8BCEDD853BCCC339DE161B46 /* PopoverContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09818E01943EFFEBABA7691D /* PopoverContentView.swift */; };
 		8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 022505363F7555E2870061A0 /* ArtworkCache.swift */; };
 		C5BA2C06F8F13D25501050EB /* SonoBarKit in Frameworks */ = {isa = PBXBuildFile; productRef = C47C1DE3A31D9B47495857F8 /* SonoBarKit */; };
@@ -24,10 +30,16 @@
 		09818E01943EFFEBABA7691D /* PopoverContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverContentView.swift; sourceTree = "<group>"; };
 		2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSwitcherView.swift; sourceTree = "<group>"; };
+		52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentListView.swift; sourceTree = "<group>"; };
 		5CAA9453A6C8F70A30772D34 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		6AE39ED123CAC10B8001B1C0 /* AlarmsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmsView.swift; sourceTree = "<group>"; };
 		800269C4C7C75C4A798728CF /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		837117D521CA72308B72C6F0 /* SonoBarKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SonoBarKit; path = SonoBarKit; sourceTree = SOURCE_ROOT; };
 		9326A0F381A56CC142EDB979 /* SonoBarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonoBarApp.swift; sourceTree = "<group>"; };
+		A5B929E0AF767FBF59460250 /* MediaKeyController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaKeyController.swift; sourceTree = "<group>"; };
+		BB389F9F52B80716CD445D77 /* BrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseView.swift; sourceTree = "<group>"; };
+		C12E5D60423F51E2C500E16A /* ContentGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentGridView.swift; sourceTree = "<group>"; };
+		C2B4BECB3532BB5092506158 /* AlarmFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmFormView.swift; sourceTree = "<group>"; };
 		CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
 		D0812108F6CC4FF0BFDECF9D /* SonoBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonoBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6BC742E9E247E08DF56EF6B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -55,6 +67,14 @@
 			path = Persistence;
 			sourceTree = "<group>";
 		};
+		3043553130FAE32445DA8F57 /* Controllers */ = {
+			isa = PBXGroup;
+			children = (
+				A5B929E0AF767FBF59460250 /* MediaKeyController.swift */,
+			);
+			path = Controllers;
+			sourceTree = "<group>";
+		};
 		374098635212C4D835C4F506 = {
 			isa = PBXGroup;
 			children = (
@@ -70,6 +90,7 @@
 				2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */,
 				F6BC742E9E247E08DF56EF6B /* Info.plist */,
 				9326A0F381A56CC142EDB979 /* SonoBarApp.swift */,
+				3043553130FAE32445DA8F57 /* Controllers */,
 				16EC740F7E915E669CBBCA59 /* Persistence */,
 				F12F2B43E6B89FFEAB48591D /* Services */,
 				B246F13890CD5420EF71D2F7 /* Views */,
@@ -96,6 +117,11 @@
 		B246F13890CD5420EF71D2F7 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C2B4BECB3532BB5092506158 /* AlarmFormView.swift */,
+				6AE39ED123CAC10B8001B1C0 /* AlarmsView.swift */,
+				BB389F9F52B80716CD445D77 /* BrowseView.swift */,
+				C12E5D60423F51E2C500E16A /* ContentGridView.swift */,
+				52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */,
 				CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */,
 				09818E01943EFFEBABA7691D /* PopoverContentView.swift */,
 				34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */,
@@ -172,9 +198,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0AE327A9F07FDBF16E30CBCA /* AlarmFormView.swift in Sources */,
+				0080213543DD386C6C589E5B /* AlarmsView.swift in Sources */,
 				0536F53032789CC218E34D83 /* AppDelegate.swift in Sources */,
 				4689D6ADC8B48002E108A687 /* AppState.swift in Sources */,
 				8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */,
+				827BD66207075FB6075E8145 /* BrowseView.swift in Sources */,
+				5C29513A59EF5A02C0229FCD /* ContentGridView.swift in Sources */,
+				64A86350DDACD5F98007D78A /* ContentListView.swift in Sources */,
+				28806D365CEAE34308004FF2 /* MediaKeyController.swift in Sources */,
 				553D7BE3098C9639F29378D6 /* NowPlayingView.swift in Sources */,
 				8BCEDD853BCCC339DE161B46 /* PopoverContentView.swift in Sources */,
 				0F33F3ED2BD864B9851AFB8D /* RoomSwitcherView.swift in Sources */,
