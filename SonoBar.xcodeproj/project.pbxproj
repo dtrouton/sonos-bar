@@ -1,0 +1,393 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0536F53032789CC218E34D83 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */; };
+		05EFD6FB44C4A9E5947EF6B9 /* VolumeSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBBDA7A4ABF3A635C1A6C887 /* VolumeSliderView.swift */; };
+		0F33F3ED2BD864B9851AFB8D /* RoomSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */; };
+		14BF7B0AB69F913251D3FB97 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CAA9453A6C8F70A30772D34 /* SettingsStore.swift */; };
+		4689D6ADC8B48002E108A687 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800269C4C7C75C4A798728CF /* AppState.swift */; };
+		553D7BE3098C9639F29378D6 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */; };
+		8BCEDD853BCCC339DE161B46 /* PopoverContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09818E01943EFFEBABA7691D /* PopoverContentView.swift */; };
+		8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 022505363F7555E2870061A0 /* ArtworkCache.swift */; };
+		C5BA2C06F8F13D25501050EB /* SonoBarKit in Frameworks */ = {isa = PBXBuildFile; productRef = C47C1DE3A31D9B47495857F8 /* SonoBarKit */; };
+		FD51B87724CFCFDC95F6B0A9 /* SonoBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9326A0F381A56CC142EDB979 /* SonoBarApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		022505363F7555E2870061A0 /* ArtworkCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkCache.swift; sourceTree = "<group>"; };
+		09818E01943EFFEBABA7691D /* PopoverContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverContentView.swift; sourceTree = "<group>"; };
+		2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSwitcherView.swift; sourceTree = "<group>"; };
+		5CAA9453A6C8F70A30772D34 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		800269C4C7C75C4A798728CF /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		837117D521CA72308B72C6F0 /* SonoBarKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SonoBarKit; path = SonoBarKit; sourceTree = SOURCE_ROOT; };
+		9326A0F381A56CC142EDB979 /* SonoBarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonoBarApp.swift; sourceTree = "<group>"; };
+		CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
+		D0812108F6CC4FF0BFDECF9D /* SonoBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonoBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6BC742E9E247E08DF56EF6B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		FBBDA7A4ABF3A635C1A6C887 /* VolumeSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeSliderView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		703CF226511E01DF06C0E99C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C5BA2C06F8F13D25501050EB /* SonoBarKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		16EC740F7E915E669CBBCA59 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				022505363F7555E2870061A0 /* ArtworkCache.swift */,
+				5CAA9453A6C8F70A30772D34 /* SettingsStore.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		374098635212C4D835C4F506 = {
+			isa = PBXGroup;
+			children = (
+				9AD819FE3FEB4E11BD5110C9 /* Packages */,
+				89A975A6FCF9A1471B35C312 /* SonoBar */,
+				943F3ECDAFE01951A6273224 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		89A975A6FCF9A1471B35C312 /* SonoBar */ = {
+			isa = PBXGroup;
+			children = (
+				2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */,
+				F6BC742E9E247E08DF56EF6B /* Info.plist */,
+				9326A0F381A56CC142EDB979 /* SonoBarApp.swift */,
+				16EC740F7E915E669CBBCA59 /* Persistence */,
+				F12F2B43E6B89FFEAB48591D /* Services */,
+				B246F13890CD5420EF71D2F7 /* Views */,
+			);
+			path = SonoBar;
+			sourceTree = "<group>";
+		};
+		943F3ECDAFE01951A6273224 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D0812108F6CC4FF0BFDECF9D /* SonoBar.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9AD819FE3FEB4E11BD5110C9 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				837117D521CA72308B72C6F0 /* SonoBarKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		B246F13890CD5420EF71D2F7 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */,
+				09818E01943EFFEBABA7691D /* PopoverContentView.swift */,
+				34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */,
+				FBBDA7A4ABF3A635C1A6C887 /* VolumeSliderView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		F12F2B43E6B89FFEAB48591D /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				800269C4C7C75C4A798728CF /* AppState.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A4E01E6490DFC61D5F3B99F8 /* SonoBar */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9C620E24A04DF2730D56562 /* Build configuration list for PBXNativeTarget "SonoBar" */;
+			buildPhases = (
+				75BB7A8770584558A3185365 /* Sources */,
+				703CF226511E01DF06C0E99C /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SonoBar;
+			packageProductDependencies = (
+				C47C1DE3A31D9B47495857F8 /* SonoBarKit */,
+			);
+			productName = SonoBar;
+			productReference = D0812108F6CC4FF0BFDECF9D /* SonoBar.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		80C6161B62FE37C473E37050 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 723911FDD374A98E0EB6AB51 /* Build configuration list for PBXProject "SonoBar" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 374098635212C4D835C4F506;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				55A2D6373E270993808C3304 /* XCLocalSwiftPackageReference "SonoBarKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 943F3ECDAFE01951A6273224 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A4E01E6490DFC61D5F3B99F8 /* SonoBar */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		75BB7A8770584558A3185365 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0536F53032789CC218E34D83 /* AppDelegate.swift in Sources */,
+				4689D6ADC8B48002E108A687 /* AppState.swift in Sources */,
+				8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */,
+				553D7BE3098C9639F29378D6 /* NowPlayingView.swift in Sources */,
+				8BCEDD853BCCC339DE161B46 /* PopoverContentView.swift in Sources */,
+				0F33F3ED2BD864B9851AFB8D /* RoomSwitcherView.swift in Sources */,
+				14BF7B0AB69F913251D3FB97 /* SettingsStore.swift in Sources */,
+				FD51B87724CFCFDC95F6B0A9 /* SonoBarApp.swift in Sources */,
+				05EFD6FB44C4A9E5947EF6B9 /* VolumeSliderView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1B2C41DDFACD8982C1D318FC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		26B422DDB7101FE99A5B603C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		91097AD84B82AE6C485BEBFC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SonoBar/SonoBar.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SonoBar/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sonobar.app;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		B89CC8109C15AD877FB9268E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SonoBar/SonoBar.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SonoBar/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sonobar.app;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		723911FDD374A98E0EB6AB51 /* Build configuration list for PBXProject "SonoBar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1B2C41DDFACD8982C1D318FC /* Debug */,
+				26B422DDB7101FE99A5B603C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A9C620E24A04DF2730D56562 /* Build configuration list for PBXNativeTarget "SonoBar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				91097AD84B82AE6C485BEBFC /* Debug */,
+				B89CC8109C15AD877FB9268E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		55A2D6373E270993808C3304 /* XCLocalSwiftPackageReference "SonoBarKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = SonoBarKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C47C1DE3A31D9B47495857F8 /* SonoBarKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SonoBarKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 80C6161B62FE37C473E37050 /* Project object */;
+}

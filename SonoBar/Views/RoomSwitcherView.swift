@@ -76,7 +76,7 @@ struct RoomSwitcherView: View {
                         .font(.system(size: 13, weight: .medium))
                     Text(statusText(for: device))
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(appState.roomStates[device.uuid]?.transportState == .playing ? .accentColor : .secondary)
                         .lineLimit(1)
                 }
 
@@ -109,21 +109,25 @@ struct RoomSwitcherView: View {
     }
 
     private func statusText(for device: SonosDevice) -> String {
-        if !device.isReachable {
-            return "Offline"
+        if !device.isReachable { return "Offline" }
+        guard let summary = appState.roomStates[device.uuid] else {
+            return device.modelName.isEmpty ? "Sonos" : device.modelName
         }
-        if device.uuid == appState.deviceManager.activeDevice?.uuid {
-            switch appState.playbackState.transportState {
-            case .playing:
-                return appState.playbackState.currentTrack?.title ?? "Playing"
-            case .pausedPlayback:
-                return "Paused"
-            case .stopped:
-                return "Idle"
-            case .transitioning:
-                return "Loading..."
+        switch summary.transportState {
+        case .playing:
+            if let title = summary.trackTitle {
+                if let artist = summary.trackArtist {
+                    return "\(artist) \u{2014} \(title)"
+                }
+                return title
             }
+            return "Playing"
+        case .pausedPlayback:
+            return "Paused"
+        case .stopped:
+            return "Idle"
+        case .transitioning:
+            return "Loading..."
         }
-        return device.modelName.isEmpty ? "Sonos" : device.modelName
     }
 }

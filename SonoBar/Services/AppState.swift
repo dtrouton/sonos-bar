@@ -2,6 +2,13 @@
 import SwiftUI
 import SonoBarKit
 
+/// Per-room playback summary for the Rooms list.
+struct RoomSummary: Equatable {
+    let transportState: TransportState
+    let trackTitle: String?
+    let trackArtist: String?
+}
+
 @MainActor
 @Observable
 final class AppState {
@@ -14,6 +21,8 @@ final class AppState {
     var playbackState = PlaybackState(transportState: .stopped, volume: 0, isMuted: false)
     var isLoading = true
     private(set) var activeController: PlaybackController?
+    /// Playback summary keyed by device UUID, populated for all rooms.
+    var roomStates: [String: RoomSummary] = [:]
 
     func startDiscovery() async {
         guard !isDiscovering else { return }
@@ -49,6 +58,7 @@ final class AppState {
 
         updateActiveController()
         await refreshPlayback()
+        await refreshAllRooms()
     }
 
     func refreshPlayback() async {
@@ -77,6 +87,52 @@ final class AppState {
         let client = SOAPClient(host: device.ip)
         try? await GroupManager.ungroup(client: client)
         await startDiscovery()
+    }
+
+    /// Queries each group coordinator in parallel to get playback state for all rooms.
+    func refreshAllRooms() async {
+        let groups = deviceManager.groups
+        // Query each group coordinator concurrently
+        await withTaskGroup(of: (String, RoomSummary)?.self) { taskGroup in
+            for group in groups {
+                guard let coordinatorMember = group.members.first(where: { $0.uuid == group.coordinatorUUID }),
+                      !coordinatorMember.ip.isEmpty else { continue }
+
+                let coordinatorIP = coordinatorMember.ip
+
+                taskGroup.addTask { @Sendable in
+                    let client = SOAPClient(host: coordinatorIP)
+                    let controller = PlaybackController(client: client)
+                    let transport = (try? await controller.getTransportState()) ?? .stopped
+                    let track = try? await controller.getPositionInfo()
+                    let summary = RoomSummary(
+                        transportState: transport,
+                        trackTitle: track?.title,
+                        trackArtist: track?.artist
+                    )
+                    // Return coordinator UUID as key; we'll map to all members below
+                    return (group.coordinatorUUID, summary)
+                }
+            }
+
+            var coordinatorSummaries: [String: RoomSummary] = [:]
+            for await result in taskGroup {
+                if let (uuid, summary) = result {
+                    coordinatorSummaries[uuid] = summary
+                }
+            }
+
+            // Map each coordinator's state to all members in that group
+            var newStates: [String: RoomSummary] = [:]
+            for group in groups {
+                if let summary = coordinatorSummaries[group.coordinatorUUID] {
+                    for member in group.members {
+                        newStates[member.uuid] = summary
+                    }
+                }
+            }
+            roomStates = newStates
+        }
     }
 
     private func updateActiveController() {
