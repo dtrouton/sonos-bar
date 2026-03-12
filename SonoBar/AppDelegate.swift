@@ -31,9 +31,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(nil)
+            appState.mediaKeyController.deactivate()
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
+            appState.mediaKeyController.activate(
+                track: appState.playbackState.currentTrack,
+                transportState: appState.playbackState.transportState
+            )
         }
     }
 }

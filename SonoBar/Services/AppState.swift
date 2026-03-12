@@ -23,6 +23,7 @@ final class AppState {
     private(set) var activeController: PlaybackController?
     /// Playback summary keyed by device UUID, populated for all rooms.
     var roomStates: [String: RoomSummary] = [:]
+    let mediaKeyController = MediaKeyController()
 
     func startDiscovery() async {
         guard !isDiscovering else { return }
@@ -59,6 +60,32 @@ final class AppState {
         updateActiveController()
         await refreshPlayback()
         await refreshAllRooms()
+
+        mediaKeyController.onPlayPause = { [weak self] in
+            guard let self else { return }
+            Task {
+                if self.playbackState.transportState == .playing {
+                    try? await self.activeController?.pause()
+                } else {
+                    try? await self.activeController?.play()
+                }
+                await self.refreshPlayback()
+            }
+        }
+        mediaKeyController.onNext = { [weak self] in
+            guard let self else { return }
+            Task {
+                try? await self.activeController?.next()
+                await self.refreshPlayback()
+            }
+        }
+        mediaKeyController.onPrevious = { [weak self] in
+            guard let self else { return }
+            Task {
+                try? await self.activeController?.previous()
+                await self.refreshPlayback()
+            }
+        }
     }
 
     func refreshPlayback() async {
@@ -72,6 +99,10 @@ final class AppState {
             volume: volume,
             isMuted: isMuted,
             currentTrack: currentTrack
+        )
+        mediaKeyController.updateNowPlaying(
+            track: currentTrack,
+            transportState: transportState
         )
     }
 
