@@ -9,28 +9,18 @@ final class AppState {
     private let ssdp = SSDPDiscovery()
     private let settings = SettingsStore()
     private var eventListener: UPnPEventListener?
+    private var isDiscovering = false
 
     var playbackState = PlaybackState(transportState: .stopped, volume: 0, isMuted: false)
     var isLoading = true
-
-    /// The SOAPClient for the active speaker's group coordinator.
-    var activeClient: SOAPClient? {
-        guard let device = deviceManager.activeDevice,
-              let ip = deviceManager.coordinatorIP(for: device.uuid) else { return nil }
-        return SOAPClient(host: ip)
-    }
-
-    var activeController: PlaybackController? {
-        guard let client = activeClient else { return nil }
-        return PlaybackController(client: client)
-    }
+    private(set) var activeController: PlaybackController?
 
     func startDiscovery() async {
-        // Restore cached speakers immediately
-        let cached = settings.loadCachedSpeakers()
-        if !cached.isEmpty, let savedUUID = settings.activeDeviceUUID {
-            deviceManager.setActiveDevice(uuid: savedUUID)
-        }
+        guard !isDiscovering else { return }
+        isDiscovering = true
+        defer { isDiscovering = false }
+
+        isLoading = true
 
         // Run SSDP discovery
         let results = await ssdp.scan()
@@ -57,7 +47,7 @@ final class AppState {
             deviceManager.setActiveDevice(uuid: savedUUID)
         }
 
-        // Refresh playback state
+        updateActiveController()
         await refreshPlayback()
     }
 
@@ -78,6 +68,23 @@ final class AppState {
     func selectRoom(uuid: String) {
         deviceManager.setActiveDevice(uuid: uuid)
         settings.activeDeviceUUID = uuid
+        updateActiveController()
         Task { await refreshPlayback() }
+    }
+
+    func ungroupDevice(uuid: String) async {
+        guard let device = deviceManager.devices.first(where: { $0.uuid == uuid }) else { return }
+        let client = SOAPClient(host: device.ip)
+        try? await GroupManager.ungroup(client: client)
+        await startDiscovery()
+    }
+
+    private func updateActiveController() {
+        guard let device = deviceManager.activeDevice,
+              let ip = deviceManager.coordinatorIP(for: device.uuid) else {
+            activeController = nil
+            return
+        }
+        activeController = PlaybackController(client: SOAPClient(host: ip))
     }
 }

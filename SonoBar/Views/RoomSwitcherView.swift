@@ -102,11 +102,7 @@ struct RoomSwitcherView: View {
         .contextMenu {
             if isGrouped {
                 Button("Ungroup") {
-                    Task {
-                        let client = SOAPClient(host: device.ip)
-                        try? await GroupManager.ungroup(client: client)
-                        await appState.startDiscovery()
-                    }
+                    Task { await appState.ungroupDevice(uuid: device.uuid) }
                 }
             }
         }

@@ -18,11 +18,11 @@ struct NowPlayingView: View {
         guard let device = appState.deviceManager.activeDevice,
               let group = appState.deviceManager.group(for: device.uuid),
               !group.isStandalone else { return nil }
-        let names = group.members
+        let others = group.members
             .filter { $0.uuid != device.uuid }
             .map { $0.zoneName }
-        guard !names.isEmpty else { return nil }
-        return "+\(names.count) \(names.joined(separator: ", "))"
+        guard !others.isEmpty else { return nil }
+        return others.joined(separator: ", ")
     }
 
     private var trackTitle: String {
@@ -56,6 +56,19 @@ struct NowPlayingView: View {
     private var isPlaying: Bool {
         appState.playbackState.transportState == .playing
     }
+
+    private var sourceBadge: String {
+        guard let uri = appState.playbackState.currentTrack?.uri else { return "" }
+        if uri.contains("spotify") { return "Spotify" }
+        if uri.contains("apple") { return "Apple Music" }
+        if uri.contains("plex") { return "Plex" }
+        if uri.contains("bbc") { return "BBC Sounds" }
+        if uri.hasPrefix("x-rincon-mp3radio:") || uri.hasPrefix("aac:") { return "Radio" }
+        if uri.hasPrefix("x-file-cifs:") || uri.hasPrefix("x-smb:") { return "Library" }
+        return ""
+    }
+
+    @State private var scrubProgress: Double = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -102,12 +115,25 @@ struct NowPlayingView: View {
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
+                if !sourceBadge.isEmpty {
+                    Text(sourceBadge)
+                        .font(.system(size: 10))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.15))
+                        .cornerRadius(10)
+                        .padding(.top, 4)
+                }
             }
             .padding(.horizontal, 16)
 
-            // Progress
+            // Progress (scrubbable)
             VStack(spacing: 4) {
-                ProgressView(value: progress, total: 1.0)
+                Slider(value: $scrubProgress, in: 0...1) { editing in
+                    if !editing {
+                        // Seek not yet wired — will be connected to PlaybackController.seek()
+                    }
+                }
                     .controlSize(.mini)
                 HStack {
                     Text(elapsed).font(.system(size: 10)).foregroundColor(.secondary)
@@ -157,12 +183,16 @@ struct NowPlayingView: View {
         .onAppear {
             sliderVolume = Double(appState.playbackState.volume)
             sliderMuted = appState.playbackState.isMuted
+            scrubProgress = progress
         }
         .onChange(of: appState.playbackState.volume) { _, newValue in
             sliderVolume = Double(newValue)
         }
         .onChange(of: appState.playbackState.isMuted) { _, newValue in
             sliderMuted = newValue
+        }
+        .onChange(of: progress) { _, newValue in
+            scrubProgress = newValue
         }
     }
 
