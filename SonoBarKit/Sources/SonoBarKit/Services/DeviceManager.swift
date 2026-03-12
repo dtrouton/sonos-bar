@@ -8,8 +8,9 @@ import Observation
 
 /// Manages discovered Sonos devices and their group topology.
 /// Tracks the active (selected) device and provides coordinator lookups.
+@MainActor
 @Observable
-public final class DeviceManager: @unchecked Sendable {
+public final class DeviceManager {
 
     /// All discovered Sonos devices, derived from zone group topology.
     public private(set) var devices: [SonosDevice] = []
@@ -29,15 +30,17 @@ public final class DeviceManager: @unchecked Sendable {
     public func updateFromZoneGroupState(_ xml: String) throws {
         let parsedGroups = try ZoneGroupParser.parse(xml)
 
-        // Build device list from all group members
+        // Build device list from all group members, preserving existing state
         var newDevices: [SonosDevice] = []
         for group in parsedGroups {
             for member in group.members {
+                let existing = devices.first { $0.uuid == member.uuid }
                 let device = SonosDevice(
                     uuid: member.uuid,
                     ip: member.ip,
                     roomName: member.zoneName,
-                    modelName: ""
+                    modelName: existing?.modelName ?? "",
+                    isReachable: existing?.isReachable ?? true
                 )
                 newDevices.append(device)
             }

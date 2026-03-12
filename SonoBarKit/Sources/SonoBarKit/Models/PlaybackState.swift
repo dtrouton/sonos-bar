@@ -47,9 +47,11 @@ public struct TrackInfo: Sendable, Equatable {
     }
 
     /// Creates a TrackInfo from a position info response dictionary.
+    /// Returns nil if the response has no Track field.
     /// Extracts metadata fields from the TrackMetaData DIDL-Lite XML.
-    public init(from dict: [String: String]) {
-        self.trackNumber = Int(dict["Track"] ?? "0") ?? 0
+    public init?(fromPositionInfo dict: [String: String]) {
+        guard let trackStr = dict["Track"], let num = Int(trackStr) else { return nil }
+        self.trackNumber = num
         self.duration = dict["TrackDuration"] ?? "0:00:00"
         self.elapsed = dict["RelTime"] ?? "0:00:00"
         self.uri = dict["TrackURI"] ?? ""

@@ -92,7 +92,7 @@ public final class PlaybackController: Sendable {
             action: "GetPositionInfo",
             params: [("InstanceID", "0")]
         )
-        return TrackInfo(from: result)
+        return TrackInfo(fromPositionInfo: result)
     }
 
     // MARK: - Volume Controls

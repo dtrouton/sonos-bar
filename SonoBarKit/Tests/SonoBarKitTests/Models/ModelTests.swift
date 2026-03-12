@@ -38,7 +38,7 @@ struct ModelTests {
         #expect(TransportState(rawValue: "INVALID") == nil)
     }
 
-    @Test func testTrackInfoFromPositionResponse() {
+    @Test func testTrackInfoFromPositionResponse() throws {
         let positionDict: [String: String] = [
             "Track": "3",
             "TrackDuration": "0:04:30",
@@ -56,7 +56,7 @@ struct ModelTests {
             """
         ]
 
-        let trackInfo = TrackInfo(from: positionDict)
+        let trackInfo = try #require(TrackInfo(fromPositionInfo: positionDict))
         #expect(trackInfo.trackNumber == 3)
         #expect(trackInfo.duration == "0:04:30")
         #expect(trackInfo.elapsed == "0:01:15")

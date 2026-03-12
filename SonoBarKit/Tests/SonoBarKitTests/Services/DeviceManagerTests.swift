@@ -2,6 +2,7 @@ import Testing
 @testable import SonoBarKit
 
 @Suite("DeviceManager Tests")
+@MainActor
 struct DeviceManagerTests {
 
     private let zoneGroupXML = """
