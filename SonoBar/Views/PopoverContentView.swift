@@ -21,8 +21,7 @@ struct PopoverContentView: View {
                 case .browse:
                     BrowseView()
                 case .alarms:
-                    Text("Alarms").frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .foregroundColor(.secondary)
+                    AlarmsView()
                 }
             }
 
