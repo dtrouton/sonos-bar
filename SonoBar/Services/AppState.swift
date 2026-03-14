@@ -70,6 +70,7 @@ final class AppState {
 
         updateActiveController()
         loadRecents()
+        initPlexIfConfigured()
         await refreshPlayback()
         await refreshAllRooms()
         await startEventListener()
@@ -575,5 +576,274 @@ final class AppState {
             return String(cString: hostname)
         }
         return nil
+    }
+
+    // MARK: - Plex Integration
+
+    private(set) var plexClient: PlexClient?
+    var plexLibraries: [PlexLibrary] = []
+    var plexOnDeck: [PlexTrack] = []
+    var plexAlbums: [PlexAlbum] = []
+    var plexTracks: [PlexTrack] = []
+    var plexError: String?
+    var isPlexLoading = false
+    var activePlexTrackId: String?
+    var activePlexAlbumId: String?
+    private var lastPlexReportTime: Date?
+
+    private static let plexHostKey = "plexServerIP"
+
+    func connectPlex(host: String, token: String) {
+        UserDefaults.standard.set(host, forKey: Self.plexHostKey)
+        PlexKeychain.setToken(token)
+        plexClient = PlexClient(host: host, token: token)
+        plexError = nil
+        Task { await loadPlexLibraries() }
+    }
+
+    func disconnectPlex() {
+        UserDefaults.standard.removeObject(forKey: Self.plexHostKey)
+        PlexKeychain.deleteToken()
+        plexClient = nil
+        plexLibraries = []
+        plexOnDeck = []
+        plexAlbums = []
+        plexTracks = []
+        plexError = nil
+        isPlexLoading = false
+        activePlexTrackId = nil
+        activePlexAlbumId = nil
+        lastPlexReportTime = nil
+    }
+
+    func initPlexIfConfigured() {
+        guard let host = UserDefaults.standard.string(forKey: Self.plexHostKey),
+              let token = PlexKeychain.getToken() else { return }
+        plexClient = PlexClient(host: host, token: token)
+        Task { await loadPlexLibraries() }
+    }
+
+    func loadPlexLibraries() async {
+        guard let client = plexClient else { return }
+        isPlexLoading = true
+        defer { isPlexLoading = false }
+        do {
+            let all = try await client.getLibraries()
+            plexLibraries = all.filter { $0.type == "artist" }
+            plexError = nil
+        } catch {
+            plexError = "Failed to load libraries: \(error.localizedDescription)"
+        }
+    }
+
+    func loadPlexOnDeck() async {
+        guard let client = plexClient else { return }
+        isPlexLoading = true
+        defer { isPlexLoading = false }
+        do {
+            var allTracks: [PlexTrack] = []
+            for library in plexLibraries {
+                let tracks = try await client.getOnDeck(sectionId: library.id)
+                allTracks.append(contentsOf: tracks)
+            }
+            plexOnDeck = allTracks.sorted { a, b in
+                (a.lastViewedAt ?? .distantPast) > (b.lastViewedAt ?? .distantPast)
+            }
+            plexError = nil
+        } catch {
+            plexError = "Failed to load on-deck: \(error.localizedDescription)"
+        }
+    }
+
+    func loadPlexAlbums(sectionId: String) async {
+        guard let client = plexClient else { return }
+        isPlexLoading = true
+        defer { isPlexLoading = false }
+        do {
+            plexAlbums = try await client.getAlbums(sectionId: sectionId)
+            plexError = nil
+        } catch {
+            plexError = "Failed to load albums: \(error.localizedDescription)"
+        }
+    }
+
+    func loadPlexTracks(albumId: String) async {
+        guard let client = plexClient else { return }
+        isPlexLoading = true
+        defer { isPlexLoading = false }
+        do {
+            plexTracks = try await client.getTracks(albumId: albumId)
+            plexError = nil
+        } catch {
+            plexError = "Failed to load tracks: \(error.localizedDescription)"
+        }
+    }
+
+    func searchPlex(query: String) async {
+        guard let client = plexClient else { return }
+        isPlexLoading = true
+        defer { isPlexLoading = false }
+        do {
+            plexAlbums = try await client.search(query: query)
+            plexError = nil
+        } catch {
+            plexError = "Search failed: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Plex Playback
+
+    func playPlexAlbum(albumId: String, startTrackIndex: Int = 0, seekOffset: Int = 0) async {
+        guard let client = plexClient, let controller = activeController else { return }
+        do {
+            let tracks = try await client.getTracks(albumId: albumId)
+            guard !tracks.isEmpty else { return }
+
+            try await controller.clearQueue()
+
+            for track in tracks {
+                guard let audioURL = client.audioURL(partKey: track.partKey) else { continue }
+                let metadata = plexDIDL(track: track)
+                try await controller.addToQueue(uri: audioURL.absoluteString, metadata: metadata)
+            }
+
+            // Seek to the start track (1-based index)
+            let trackNumber = startTrackIndex + 1
+            try await controller.seekToTrack(trackNumber)
+            try await controller.play()
+
+            // If there's a seek offset, wait for PLAYING then seek
+            if seekOffset > 0 {
+                try await waitForPlaying()
+                let h = seekOffset / 3600
+                let m = (seekOffset % 3600) / 60
+                let s = seekOffset % 60
+                let target = String(format: "%d:%02d:%02d", h, m, s)
+                try await controller.seek(to: target)
+            }
+
+            activePlexAlbumId = albumId
+            if startTrackIndex < tracks.count {
+                activePlexTrackId = tracks[startTrackIndex].id
+            }
+
+            await refreshPlayback()
+        } catch {
+            plexError = "Playback failed: \(error.localizedDescription)"
+        }
+    }
+
+    func resumePlexTrack(_ track: PlexTrack) async {
+        await playPlexSingleTrack(track)
+    }
+
+    func playPlexSingleTrack(_ track: PlexTrack) async {
+        guard let client = plexClient, let controller = activeController else { return }
+        do {
+            guard let audioURL = client.audioURL(partKey: track.partKey) else { return }
+            let metadata = plexDIDL(track: track)
+
+            try await controller.clearQueue()
+            try await controller.addToQueue(uri: audioURL.absoluteString, metadata: metadata)
+            try await controller.seekToTrack(1)
+            try await controller.play()
+
+            // Resume from saved position if there's a viewOffset
+            if track.viewOffset > 0 {
+                try await waitForPlaying()
+                let offsetSeconds = track.viewOffset / 1000
+                let h = offsetSeconds / 3600
+                let m = (offsetSeconds % 3600) / 60
+                let s = offsetSeconds % 60
+                let target = String(format: "%d:%02d:%02d", h, m, s)
+                try await controller.seek(to: target)
+            }
+
+            activePlexTrackId = track.id
+            activePlexAlbumId = nil
+
+            await refreshPlayback()
+        } catch {
+            plexError = "Playback failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func waitForPlaying() async throws {
+        for _ in 0..<20 {
+            if let controller = activeController,
+               let state = try? await controller.getTransportState(),
+               state == .playing {
+                return
+            }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+    }
+
+    private func plexDIDL(track: PlexTrack) -> String {
+        let title = xmlEscape(track.title)
+        let creator = xmlEscape(track.artistName)
+        let album = xmlEscape(track.albumTitle)
+        return """
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" \
+        xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" \
+        xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">\
+        <item><dc:title>\(title)</dc:title>\
+        <dc:creator>\(creator)</dc:creator>\
+        <upnp:album>\(album)</upnp:album>\
+        <upnp:class>object.item.audioItem.musicTrack</upnp:class>\
+        </item></DIDL-Lite>
+        """
+    }
+
+    private func xmlEscape(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
+    }
+
+    func reportPlexProgressIfNeeded() async {
+        guard let client = plexClient,
+              let controller = activeController,
+              let trackId = activePlexTrackId else { return }
+
+        // Throttle: only report every 30 seconds
+        if let lastReport = lastPlexReportTime,
+           Date.now.timeIntervalSince(lastReport) < 30 {
+            return
+        }
+
+        do {
+            let transportState = try await controller.getTransportState()
+            guard let positionInfo = try await controller.getPositionInfo() else { return }
+
+            let elapsedSeconds = parseSleepTime(positionInfo.elapsed)
+            let durationSeconds = parseSleepTime(positionInfo.duration)
+
+            let state: String
+            switch transportState {
+            case .playing: state = "playing"
+            case .pausedPlayback: state = "paused"
+            default: state = "stopped"
+            }
+
+            let offsetMs = elapsedSeconds * 1000
+            let durationMs = durationSeconds * 1000
+
+            try await client.reportProgress(
+                trackId: trackId,
+                offsetMs: offsetMs,
+                duration: durationMs,
+                state: state
+            )
+
+            lastPlexReportTime = Date.now
+        } catch {
+            #if DEBUG
+            print("[Plex] Progress report failed: \(error)")
+            #endif
+        }
     }
 }
