@@ -63,6 +63,24 @@ struct PlaybackControllerTests {
         #expect(body.contains("<DesiredVolume>0</DesiredVolume>"))
     }
 
+    @Test func testClearQueueSendsRemoveAllTracks() async throws {
+        let mock = CapturingHTTPClient()
+        mock.responseData = makeEmptyResponse(action: "RemoveAllTracksFromQueue", service: .avTransport)
+        let controller = PlaybackController(client: SOAPClient(host: "192.168.1.10", httpClient: mock))
+        try await controller.clearQueue()
+        #expect(mock.lastBodyString?.contains("RemoveAllTracksFromQueue") == true)
+    }
+
+    @Test func testAddToQueueSendsCorrectParams() async throws {
+        let mock = CapturingHTTPClient()
+        mock.responseData = makeEmptyResponse(action: "AddURIToQueue", service: .avTransport)
+        let controller = PlaybackController(client: SOAPClient(host: "192.168.1.10", httpClient: mock))
+        try await controller.addToQueue(uri: "http://plex/file.mp3", metadata: "<DIDL/>")
+        let body = mock.lastBodyString ?? ""
+        #expect(body.contains("AddURIToQueue"))
+        #expect(body.contains("http://plex/file.mp3"))
+    }
+
     @Test func testGetTransportStateParsesResponse() async throws {
         let mock = CapturingHTTPClient()
         let responseXML = """

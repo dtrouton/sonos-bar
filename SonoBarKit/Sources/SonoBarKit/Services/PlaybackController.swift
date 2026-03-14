@@ -195,6 +195,32 @@ public final class PlaybackController: Sendable {
         return Int(result["CurrentVolume"] ?? "0") ?? 0
     }
 
+    // MARK: - Queue Management
+
+    /// Removes all tracks from the Sonos queue.
+    public func clearQueue() async throws {
+        _ = try await client.callAction(
+            service: .avTransport,
+            action: "RemoveAllTracksFromQueue",
+            params: [("InstanceID", "0")]
+        )
+    }
+
+    /// Adds a track to the end of the Sonos queue.
+    public func addToQueue(uri: String, metadata: String) async throws {
+        _ = try await client.callAction(
+            service: .avTransport,
+            action: "AddURIToQueue",
+            params: [
+                ("InstanceID", "0"),
+                ("EnqueuedURI", uri),
+                ("EnqueuedURIMetaData", metadata),
+                ("DesiredFirstTrackNumberEnqueued", "0"),
+                ("EnqueueAsNext", "0")
+            ]
+        )
+    }
+
     // MARK: - Play URI
 
     /// Plays a URI with optional metadata.
