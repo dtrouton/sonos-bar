@@ -67,6 +67,52 @@ struct ModelTests {
         #expect(trackInfo.albumArtURI == "http://example.com/art.jpg")
     }
 
+    @Test func testTrackInfoExtractsAlbumArtWithAttributes() throws {
+        let positionDict: [String: String] = [
+            "Track": "1",
+            "TrackDuration": "0:03:00",
+            "RelTime": "0:00:10",
+            "TrackURI": "x-sonosapi-hls-static:catalog/tracks/abc",
+            "TrackMetaData": """
+            <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
+            <item>
+            <dc:title>Apple Track</dc:title>
+            <dc:creator>Apple Artist</dc:creator>
+            <upnp:album>Apple Album</upnp:album>
+            <upnp:albumArtURI dlna:profileID="JPEG_TN">https://is1-ssl.mzstatic.com/image/thumb/Music/art.jpg</upnp:albumArtURI>
+            </item>
+            </DIDL-Lite>
+            """
+        ]
+
+        let trackInfo = try #require(TrackInfo(fromPositionInfo: positionDict))
+        #expect(trackInfo.albumArtURI == "https://is1-ssl.mzstatic.com/image/thumb/Music/art.jpg")
+        #expect(trackInfo.album == "Apple Album")
+    }
+
+    @Test func testTrackInfoDecodesXMLEntitiesInArtURI() throws {
+        let positionDict: [String: String] = [
+            "Track": "1",
+            "TrackDuration": "0:02:11",
+            "RelTime": "0:00:36",
+            "TrackURI": "x-sonos-htastream:RINCON_123",
+            "TrackMetaData": """
+            <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
+            <item>
+            <dc:title>Rest</dc:title>
+            <dc:creator>Soothing Oasis</dc:creator>
+            <upnp:albumArtURI>/getaa?s=1&amp;u=x-sonos-htastream%3aRINCON_123</upnp:albumArtURI>
+            <upnp:album>Calm Sounds</upnp:album>
+            </item>
+            </DIDL-Lite>
+            """
+        ]
+
+        let trackInfo = try #require(TrackInfo(fromPositionInfo: positionDict))
+        #expect(trackInfo.album == "Calm Sounds")
+        #expect(trackInfo.albumArtURI == "/getaa?s=1&u=x-sonos-htastream%3aRINCON_123")
+    }
+
     @Test func testParseZoneGroupState() throws {
         let xml = """
         <ZoneGroupState>

@@ -17,7 +17,7 @@ struct PopoverContentView: View {
                 case .nowPlaying:
                     NowPlayingView(navigateToRooms: { selectedTab = .rooms })
                 case .rooms:
-                    RoomSwitcherView()
+                    RoomSwitcherView(onRoomSelected: { selectedTab = .nowPlaying })
                 case .browse:
                     BrowseView()
                 case .alarms:
@@ -36,7 +36,7 @@ struct PopoverContentView: View {
             .padding(.vertical, 8)
             .background(Color(nsColor: .controlBackgroundColor))
         }
-        .frame(width: 320, height: 450)
+        .frame(width: 320, height: 480)
     }
 
     private func tabButton(tab: Tab, icon: String, label: String) -> some View {

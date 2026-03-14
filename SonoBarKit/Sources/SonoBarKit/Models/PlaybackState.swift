@@ -65,16 +65,39 @@ public struct TrackInfo: Sendable, Equatable {
     }
 
     /// Simple tag content extraction from XML.
-    /// Finds content between <tag> and </tag>.
+    /// Handles both `<tag>` and `<tag attr="...">` forms.
+    /// Decodes XML entities in the extracted value.
     private static func extractTag(_ tag: String, from xml: String) -> String? {
-        let openTag = "<\(tag)>"
-        let closeTag = "</\(tag)>"
-        guard let openRange = xml.range(of: openTag),
-              let closeRange = xml.range(of: closeTag, range: openRange.upperBound..<xml.endIndex) else {
-            return nil
+        let searchTag = "<\(tag)"
+        var searchStart = xml.startIndex
+        // Walk forward to find an exact tag match (not a prefix, e.g. <upnp:album vs <upnp:albumArtURI)
+        while let openRange = xml.range(of: searchTag, range: searchStart..<xml.endIndex) {
+            let afterTag = openRange.upperBound
+            guard afterTag < xml.endIndex else { return nil }
+            let next = xml[afterTag]
+            // Valid tag boundary: '>' (no attrs), ' '/'\t' (attrs), or '/' (self-closing)
+            if next == ">" || next == " " || next == "\t" || next == "/" {
+                guard let gtRange = xml.range(of: ">", range: afterTag..<xml.endIndex),
+                      let closeRange = xml.range(of: "</\(tag)>", range: gtRange.upperBound..<xml.endIndex) else {
+                    return nil
+                }
+                let raw = String(xml[gtRange.upperBound..<closeRange.lowerBound])
+                guard !raw.isEmpty else { return nil }
+                return decodeXMLEntities(raw)
+            }
+            searchStart = openRange.upperBound
         }
-        let value = String(xml[openRange.upperBound..<closeRange.lowerBound])
-        return value.isEmpty ? nil : value
+        return nil
+    }
+
+    /// Decodes standard XML entities.
+    private static func decodeXMLEntities(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&apos;", with: "'")
     }
 }
 

@@ -1,5 +1,5 @@
 /// A content item from the Sonos ContentDirectory (favorite, playlist, or queue track).
-public struct ContentItem: Identifiable, Sendable, Equatable {
+public struct ContentItem: Identifiable, Sendable, Equatable, Codable {
     public let id: String
     public let title: String
     public let albumArtURI: String?

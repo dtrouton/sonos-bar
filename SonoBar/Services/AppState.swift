@@ -1,6 +1,10 @@
 // SonoBar/Services/AppState.swift
+import AppKit
 import SwiftUI
 import SonoBarKit
+#if canImport(Darwin)
+import Darwin
+#endif
 
 /// Per-room playback summary for the Rooms list.
 struct RoomSummary: Equatable {
@@ -16,14 +20,21 @@ final class AppState {
     private let ssdp = SSDPDiscovery()
     private let settings = SettingsStore()
     private var eventListener: UPnPEventListener?
+    private var subscriptionIDs: [SonosService: String] = [:]
     private var isDiscovering = false
 
     var playbackState = PlaybackState(transportState: .stopped, volume: 0, isMuted: false)
+    var albumArtImage: NSImage? = nil
     var isLoading = true
     private(set) var activeController: PlaybackController?
+    private let artworkCache = ArtworkCache()
     /// Playback summary keyed by device UUID, populated for all rooms.
     var roomStates: [String: RoomSummary] = [:]
     let mediaKeyController = MediaKeyController()
+    var recentItems: [ContentItem] = []
+    private var lastMediaURI: String?
+    private static let maxRecents = 50
+    private static let recentsKey = "recentItems"
 
     func startDiscovery() async {
         guard !isDiscovering else { return }
@@ -58,8 +69,10 @@ final class AppState {
         }
 
         updateActiveController()
+        loadRecents()
         await refreshPlayback()
         await refreshAllRooms()
+        await startEventListener()
 
         mediaKeyController.onPlayPause = { [weak self] in
             guard let self else { return }
@@ -104,13 +117,60 @@ final class AppState {
             track: currentTrack,
             transportState: transportState
         )
+
+        await loadAlbumArt()
+
+        // Track recents: when the media source changes, record it
+        if transportState == .playing || transportState == .pausedPlayback {
+            if let mediaInfo = try? await controller.getMediaInfo(),
+               !mediaInfo.uri.isEmpty,
+               mediaInfo.uri != lastMediaURI {
+                lastMediaURI = mediaInfo.uri
+
+                var recentURI = mediaInfo.uri
+                var recentDIDL = mediaInfo.metadata
+
+                // For queue-based playback (Audible, Plex, etc.), get the original
+                // content URI from EnqueuedTransportURI so we can replay it
+                if !Self.isReplayableURI(mediaInfo.uri) {
+                    if let enqueued = try? await controller.getEnqueuedTransportURI(),
+                       Self.isReplayableURI(enqueued.uri) {
+                        recentURI = enqueued.uri
+                        recentDIDL = enqueued.metadata
+                        #if DEBUG
+                        print("[Recents] Queue content — using enqueued URI: \(enqueued.uri)")
+                        #endif
+                    } else {
+                        #if DEBUG
+                        print("[Recents] Skipping non-replayable URI: \(mediaInfo.uri)")
+                        #endif
+                        return
+                    }
+                }
+
+                let item = ContentItem(
+                    id: recentURI,
+                    title: currentTrack?.title ?? "Unknown",
+                    albumArtURI: currentTrack?.albumArtURI,
+                    resourceURI: recentURI,
+                    rawDIDL: recentDIDL,
+                    itemClass: "object.item.audioItem",
+                    description: currentTrack?.artist
+                )
+                addRecent(item)
+            }
+        }
     }
 
     func selectRoom(uuid: String) {
         deviceManager.setActiveDevice(uuid: uuid)
         settings.activeDeviceUUID = uuid
         updateActiveController()
-        Task { await refreshPlayback() }
+        stopEventListener()
+        Task {
+            await refreshPlayback()
+            await startEventListener()
+        }
     }
 
     func ungroupDevice(uuid: String) async {
@@ -166,6 +226,42 @@ final class AppState {
         }
     }
 
+    func loadAlbumArt() async {
+        guard let albumArtURI = playbackState.currentTrack?.albumArtURI,
+              !albumArtURI.isEmpty else {
+            albumArtImage = nil
+            return
+        }
+
+        // Absolute URLs (from Spotify, Tidal, etc.) are used directly;
+        // relative paths (from local library, Sonos radio) are prefixed with the speaker IP.
+        let fullURL: String
+        if albumArtURI.hasPrefix("http://") || albumArtURI.hasPrefix("https://") {
+            fullURL = albumArtURI
+        } else {
+            guard let device = deviceManager.activeDevice,
+                  let ip = deviceManager.coordinatorIP(for: device.uuid) else {
+                albumArtImage = nil
+                return
+            }
+            fullURL = "http://\(ip):1400\(albumArtURI)"
+        }
+
+        if let cached = artworkCache.get(for: fullURL) {
+            albumArtImage = cached
+            return
+        }
+
+        guard let url = URL(string: fullURL),
+              let (data, _) = try? await URLSession.shared.data(from: url) else {
+            albumArtImage = nil
+            return
+        }
+
+        artworkCache.set(data, for: fullURL)
+        albumArtImage = NSImage(data: data)
+    }
+
     private func updateActiveController() {
         guard let device = deviceManager.activeDevice,
               let ip = deviceManager.coordinatorIP(for: device.uuid) else {
@@ -185,44 +281,93 @@ final class AppState {
 
     var contentItems: [ContentItem] = []
     var contentError: String? = nil
+    var isBrowseLoading = false
+
+    /// Favorites and Playlists are system-wide — any speaker can serve them.
+    /// Try the active speaker's coordinator first, fall back to any reachable device.
+    private func browseSystemWide(
+        _ operation: (SOAPClient) async throws -> [ContentItem]
+    ) async {
+        contentError = nil
+        contentItems = []
+        isBrowseLoading = true
+        defer { isBrowseLoading = false }
+
+        // Build candidate IPs: coordinator first, then all known devices
+        var candidateIPs: [String] = []
+        if let client = activeClient { candidateIPs.append(client.host) }
+        for device in deviceManager.devices where !device.ip.isEmpty && !candidateIPs.contains(device.ip) {
+            candidateIPs.append(device.ip)
+        }
+        guard !candidateIPs.isEmpty else {
+            contentError = "No speaker selected"
+            return
+        }
+
+        for ip in candidateIPs {
+            do {
+                contentItems = try await operation(SOAPClient(host: ip))
+                return
+            } catch {
+                continue
+            }
+        }
+        contentError = "No speaker reachable"
+    }
 
     func browseFavorites() async {
-        contentError = nil
-        guard let client = activeClient else { return }
-        do {
-            contentItems = try await ContentBrowser.browseFavorites(client: client)
-        } catch {
-            contentError = "Failed to load favorites"
-        }
+        await browseSystemWide { try await ContentBrowser.browseFavorites(client: $0) }
     }
 
     func browsePlaylists() async {
-        contentError = nil
-        guard let client = activeClient else { return }
-        do {
-            contentItems = try await ContentBrowser.browsePlaylists(client: client)
-        } catch {
-            contentError = "Failed to load playlists"
-        }
+        await browseSystemWide { try await ContentBrowser.browsePlaylists(client: $0) }
     }
 
     func browseQueue() async {
         contentError = nil
-        guard let client = activeClient else { return }
+        contentItems = []
+        isBrowseLoading = true
+        defer { isBrowseLoading = false }
+        guard let client = activeClient else {
+            contentError = "No speaker selected"
+            return
+        }
         do {
             contentItems = try await ContentBrowser.browseQueue(client: client)
         } catch {
-            contentError = "Failed to load queue"
+            contentError = "Queue: \(error.localizedDescription)"
         }
     }
 
     func playItem(_ item: ContentItem) async {
         guard let client = activeClient else { return }
+        #if DEBUG
+        print("[PlayItem] URI: \(item.resourceURI)")
+        print("[PlayItem] DIDL length: \(item.rawDIDL.count), empty: \(item.rawDIDL.isEmpty)")
+        print("[PlayItem] DIDL: \(String(item.rawDIDL.prefix(200)))")
+        #endif
         do {
             try await ContentBrowser.playItem(client: client, item: item)
             await refreshPlayback()
         } catch {
-            contentError = "Failed to play \(item.title)"
+            #if DEBUG
+            print("[PlayItem] Failed with metadata, retrying without: \(error)")
+            #endif
+            // Retry without metadata — some URIs work without it
+            do {
+                let noMetadata = ContentItem(
+                    id: item.id, title: item.title, albumArtURI: item.albumArtURI,
+                    resourceURI: item.resourceURI, rawDIDL: "",
+                    itemClass: item.itemClass, description: item.description
+                )
+                try await ContentBrowser.playItem(client: client, item: noMetadata)
+                await refreshPlayback()
+            } catch {
+                #if DEBUG
+                print("[PlayItem] Also failed without metadata: \(error)")
+                #endif
+                contentError = "Play failed: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -230,6 +375,8 @@ final class AppState {
 
     var alarms: [SonosAlarm] = []
     var sleepTimerRemaining: String? = nil
+    /// Computed end date for local countdown — set from API remaining time.
+    var sleepTimerEndDate: Date? = nil
 
     func fetchAlarms() async {
         guard let client = activeClient else { return }
@@ -270,17 +417,163 @@ final class AppState {
     func setSleepTimer(minutes: Int) async {
         guard let client = activeClient else { return }
         try? await SleepTimerController.setSleepTimer(client: client, minutes: minutes)
-        await refreshSleepTimer()
+        // Set end date immediately — don't rely on a second SOAP round-trip
+        sleepTimerEndDate = Date.now.addingTimeInterval(TimeInterval(minutes * 60))
+        sleepTimerRemaining = String(format: "%02d:%02d:00", minutes / 60, minutes % 60)
     }
 
     func cancelSleepTimer() async {
         guard let client = activeClient else { return }
         try? await SleepTimerController.cancelSleepTimer(client: client)
         sleepTimerRemaining = nil
+        sleepTimerEndDate = nil
     }
 
     func refreshSleepTimer() async {
         guard let client = activeClient else { return }
-        sleepTimerRemaining = try? await SleepTimerController.getRemainingTime(client: client)
+        do {
+            let remaining = try await SleepTimerController.getRemainingTime(client: client)
+            sleepTimerRemaining = remaining
+            if let remaining {
+                let seconds = parseSleepTime(remaining)
+                sleepTimerEndDate = seconds > 0 ? Date.now.addingTimeInterval(TimeInterval(seconds)) : nil
+            } else {
+                // API succeeded but no timer active
+                sleepTimerEndDate = nil
+            }
+        } catch {
+            // API call failed — keep existing values rather than clearing
+        }
+    }
+
+    /// Returns true if the URI can be replayed via SetAVTransportURI.
+    /// Queue refs, group joins, line-in, and TV audio can't be replayed.
+    private static func isReplayableURI(_ uri: String) -> Bool {
+        let nonReplayable = [
+            "x-rincon-queue:",      // queue reference — not a content URI
+            "x-rincon:",            // group join URI
+            "x-rincon-stream:",     // line-in audio
+            "x-sonos-htastream:",   // TV/HDMI audio
+        ]
+        return !nonReplayable.contains { uri.hasPrefix($0) }
+    }
+
+    /// Parses "HH:MM:SS" into total seconds.
+    private func parseSleepTime(_ time: String) -> Int {
+        let parts = time.split(separator: ":").compactMap { Int($0) }
+        switch parts.count {
+        case 3: return parts[0] * 3600 + parts[1] * 60 + parts[2]
+        case 2: return parts[0] * 60 + parts[1]
+        case 1: return parts[0]
+        default: return 0
+        }
+    }
+
+    // MARK: - Recents
+
+    private func addRecent(_ item: ContentItem) {
+        // Remove existing entry with same URI, then prepend
+        recentItems.removeAll { $0.resourceURI == item.resourceURI }
+        recentItems.insert(item, at: 0)
+        if recentItems.count > Self.maxRecents {
+            recentItems = Array(recentItems.prefix(Self.maxRecents))
+        }
+        saveRecents()
+    }
+
+    private func saveRecents() {
+        guard let data = try? JSONEncoder().encode(recentItems) else { return }
+        UserDefaults.standard.set(data, forKey: Self.recentsKey)
+    }
+
+    private func loadRecents() {
+        guard let data = UserDefaults.standard.data(forKey: Self.recentsKey),
+              let items = try? JSONDecoder().decode([ContentItem].self, from: data) else { return }
+        // Filter out any non-replayable URIs saved from before the filter was added
+        recentItems = items.filter { Self.isReplayableURI($0.resourceURI) }
+    }
+
+    // MARK: - UPnP Event Subscriptions
+
+    private func startEventListener() async {
+        guard let device = deviceManager.activeDevice,
+              let speakerIP = deviceManager.coordinatorIP(for: device.uuid) else { return }
+
+        let listener = UPnPEventListener()
+        self.eventListener = listener
+
+        do {
+            try await listener.start { [weak self] service, properties in
+                Task { @MainActor [weak self] in
+                    self?.handleEvent(service: service, properties: properties)
+                }
+            }
+        } catch {
+            return
+        }
+
+        guard let port = listener.port,
+              let localIP = getLocalIP() else { return }
+
+        let services: [SonosService] = [.avTransport, .renderingControl]
+        for service in services {
+            let callbackURL = "http://\(localIP):\(port)\(UPnPEventListener.callbackPath(for: service))"
+            let request = UPnPSubscription.buildSubscribeRequest(
+                speakerHost: speakerIP,
+                service: service,
+                callbackURL: callbackURL
+            )
+            if let (_, response) = try? await URLSession.shared.data(for: request),
+               let httpResponse = response as? HTTPURLResponse,
+               let sid = httpResponse.value(forHTTPHeaderField: "SID") {
+                subscriptionIDs[service] = sid
+            }
+        }
+    }
+
+    private func handleEvent(service: SonosService, properties: [String: String]) {
+        Task {
+            await refreshPlayback()
+        }
+    }
+
+    private func stopEventListener() {
+        guard let device = deviceManager.activeDevice,
+              let speakerIP = deviceManager.coordinatorIP(for: device.uuid) else {
+            eventListener?.stop()
+            eventListener = nil
+            subscriptionIDs.removeAll()
+            return
+        }
+
+        for (service, sid) in subscriptionIDs {
+            let request = UPnPSubscription.buildUnsubscribeRequest(
+                speakerHost: speakerIP,
+                service: service,
+                sid: sid
+            )
+            Task { _ = try? await URLSession.shared.data(for: request) }
+        }
+
+        eventListener?.stop()
+        eventListener = nil
+        subscriptionIDs.removeAll()
+    }
+
+    private func getLocalIP() -> String? {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else { return nil }
+        defer { freeifaddrs(ifaddr) }
+        for ptr in sequence(first: firstAddr, next: { $0.pointee.ifa_next }) {
+            let addr = ptr.pointee
+            guard addr.ifa_addr.pointee.sa_family == UInt8(AF_INET) else { continue }
+            let name = String(cString: addr.ifa_name)
+            guard name == "en0" || name == "en1" else { continue }
+            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            getnameinfo(addr.ifa_addr, socklen_t(addr.ifa_addr.pointee.sa_len),
+                         &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST)
+            return String(cString: hostname)
+        }
+        return nil
     }
 }

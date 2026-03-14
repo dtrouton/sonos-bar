@@ -69,6 +69,29 @@ public final class PlaybackController: Sendable {
         )
     }
 
+    /// Jumps to a specific track number in the queue.
+    /// - Parameter trackNumber: 1-based track index.
+    public func seekToTrack(_ trackNumber: Int) async throws {
+        _ = try await client.callAction(
+            service: .avTransport,
+            action: "Seek",
+            params: [("InstanceID", "0"), ("Unit", "TRACK_NR"), ("Target", "\(trackNumber)")]
+        )
+    }
+
+    // MARK: - Media Info
+
+    /// Gets the current media URI and metadata (the source being played, e.g. playlist or station).
+    public func getMediaInfo() async throws -> (uri: String, metadata: String)? {
+        let result = try await client.callAction(
+            service: .avTransport,
+            action: "GetMediaInfo",
+            params: [("InstanceID", "0")]
+        )
+        guard let uri = result["CurrentURI"], !uri.isEmpty else { return nil }
+        return (uri: uri, metadata: result["CurrentURIMetaData"] ?? "")
+    }
+
     // MARK: - Transport State
 
     /// Gets the current transport state.
@@ -93,6 +116,20 @@ public final class PlaybackController: Sendable {
             params: [("InstanceID", "0")]
         )
         return TrackInfo(fromPositionInfo: result)
+    }
+
+    /// Gets the enqueued transport URI and metadata from the current position info.
+    /// This is the original content URI used to start queue-based playback
+    /// (e.g. an Audible audiobook container or Plex album).
+    public func getEnqueuedTransportURI() async throws -> (uri: String, metadata: String)? {
+        let result = try await client.callAction(
+            service: .avTransport,
+            action: "GetPositionInfo",
+            params: [("InstanceID", "0")]
+        )
+        guard let uri = result["EnqueuedTransportURI"], !uri.isEmpty,
+              uri != "x-rincon-queue:" else { return nil }
+        return (uri: uri, metadata: result["EnqueuedTransportURIMetaData"] ?? "")
     }
 
     // MARK: - Volume Controls

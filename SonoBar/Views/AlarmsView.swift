@@ -8,47 +8,7 @@ struct AlarmsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Sleep Timer section
-            VStack(spacing: 8) {
-                HStack {
-                    Text("Sleep Timer")
-                        .font(.system(size: 13, weight: .semibold))
-                    Spacer()
-                }
-
-                if let remaining = appState.sleepTimerRemaining {
-                    HStack {
-                        Image(systemName: "moon.fill")
-                            .foregroundColor(.accentColor)
-                        Text("\(remaining) remaining")
-                            .font(.system(size: 12))
-                        Spacer()
-                        Button("Cancel") {
-                            Task { await appState.cancelSleepTimer() }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        ForEach([15, 30, 45, 60], id: \.self) { mins in
-                            Button("\(mins)m") {
-                                Task { await appState.setSleepTimer(minutes: mins) }
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                        Spacer()
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
-
-            Divider()
-
-            // Alarms section
+            // Alarms header
             HStack {
                 Text("Alarms")
                     .font(.system(size: 13, weight: .semibold))
@@ -85,10 +45,7 @@ struct AlarmsView: View {
             }
         }
         .onAppear {
-            Task {
-                await appState.fetchAlarms()
-                await appState.refreshSleepTimer()
-            }
+            Task { await appState.fetchAlarms() }
         }
         .sheet(isPresented: $showingAddForm) {
             AlarmFormView()

@@ -18,6 +18,7 @@
 		553D7BE3098C9639F29378D6 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */; };
 		5C29513A59EF5A02C0229FCD /* ContentGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12E5D60423F51E2C500E16A /* ContentGridView.swift */; };
 		64A86350DDACD5F98007D78A /* ContentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */; };
+		QUEUE01LIST001VIEW0BUILDRF /* QueueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = QUEUE01LIST001VIEW0FILEREF /* QueueListView.swift */; };
 		827BD66207075FB6075E8145 /* BrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB389F9F52B80716CD445D77 /* BrowseView.swift */; };
 		8BCEDD853BCCC339DE161B46 /* PopoverContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09818E01943EFFEBABA7691D /* PopoverContentView.swift */; };
 		8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 022505363F7555E2870061A0 /* ArtworkCache.swift */; };
@@ -31,6 +32,7 @@
 		2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSwitcherView.swift; sourceTree = "<group>"; };
 		52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentListView.swift; sourceTree = "<group>"; };
+		QUEUE01LIST001VIEW0FILEREF /* QueueListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueListView.swift; sourceTree = "<group>"; };
 		5CAA9453A6C8F70A30772D34 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		6AE39ED123CAC10B8001B1C0 /* AlarmsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmsView.swift; sourceTree = "<group>"; };
 		800269C4C7C75C4A798728CF /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -122,6 +124,7 @@
 				BB389F9F52B80716CD445D77 /* BrowseView.swift */,
 				C12E5D60423F51E2C500E16A /* ContentGridView.swift */,
 				52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */,
+				QUEUE01LIST001VIEW0FILEREF /* QueueListView.swift */,
 				CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */,
 				09818E01943EFFEBABA7691D /* PopoverContentView.swift */,
 				34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */,
@@ -206,6 +209,7 @@
 				827BD66207075FB6075E8145 /* BrowseView.swift in Sources */,
 				5C29513A59EF5A02C0229FCD /* ContentGridView.swift in Sources */,
 				64A86350DDACD5F98007D78A /* ContentListView.swift in Sources */,
+				QUEUE01LIST001VIEW0BUILDRF /* QueueListView.swift in Sources */,
 				28806D365CEAE34308004FF2 /* MediaKeyController.swift in Sources */,
 				553D7BE3098C9639F29378D6 /* NowPlayingView.swift in Sources */,
 				8BCEDD853BCCC339DE161B46 /* PopoverContentView.swift in Sources */,

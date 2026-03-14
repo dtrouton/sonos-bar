@@ -4,6 +4,7 @@ import SonoBarKit
 
 struct RoomSwitcherView: View {
     @Environment(AppState.self) private var appState
+    var onRoomSelected: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,6 +64,7 @@ struct RoomSwitcherView: View {
 
         return Button {
             appState.selectRoom(uuid: device.uuid)
+            onRoomSelected()
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: icon)

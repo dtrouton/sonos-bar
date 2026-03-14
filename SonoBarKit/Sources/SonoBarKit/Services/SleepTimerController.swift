@@ -22,8 +22,13 @@ public enum SleepTimerController {
             action: "GetRemainingSleepTimerDuration",
             params: [("InstanceID", "0")]
         )
-        guard let remaining = result["RemainSleepTimerDuration"],
-              !remaining.isEmpty else { return nil }
+        #if DEBUG
+        print("[SleepTimer] Raw response keys: \(Array(result.keys))")
+        print("[SleepTimer] Raw response: \(result)")
+        #endif
+        // Try both known key variants
+        let remaining = result["RemainingSleepTimerDuration"] ?? result["RemainSleepTimerDuration"]
+        guard let remaining, !remaining.isEmpty else { return nil }
         return remaining
     }
 

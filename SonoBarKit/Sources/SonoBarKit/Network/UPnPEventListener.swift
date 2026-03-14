@@ -101,9 +101,7 @@ public final class UPnPEventListener: @unchecked Sendable {
 
     /// The TCP port the listener is running on, or nil if not started.
     public var port: UInt16? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _port
+        lock.withLock { _port }
     }
 
     private var _port: UInt16?
@@ -128,9 +126,7 @@ public final class UPnPEventListener: @unchecked Sendable {
     /// - Parameter onEvent: Closure called when an event notification is received.
     /// - Throws: If no port could be bound after 5 attempts.
     public func start(onEvent: @escaping EventCallback) async throws {
-        lock.lock()
-        self._onEvent = onEvent
-        lock.unlock()
+        lock.withLock { self._onEvent = onEvent }
 
         var lastError: Error?
         for _ in 0..<5 {
@@ -146,12 +142,13 @@ public final class UPnPEventListener: @unchecked Sendable {
 
     /// Stops the HTTP listener and cancels all connections.
     public func stop() {
-        lock.lock()
-        let currentListener = _listener
-        _listener = nil
-        _port = nil
-        _onEvent = nil
-        lock.unlock()
+        let currentListener = lock.withLock { () -> NWListener? in
+            let l = _listener
+            _listener = nil
+            _port = nil
+            _onEvent = nil
+            return l
+        }
         currentListener?.cancel()
     }
 
@@ -163,18 +160,16 @@ public final class UPnPEventListener: @unchecked Sendable {
         private let lock = NSLock()
 
         var resumed: Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            return _resumed
+            lock.withLock { _resumed }
         }
 
         /// Attempts to mark as resumed. Returns true if this was the first call.
         func tryResume() -> Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            if _resumed { return false }
-            _resumed = true
-            return true
+            lock.withLock {
+                if _resumed { return false }
+                _resumed = true
+                return true
+            }
         }
     }
 
@@ -189,10 +184,8 @@ public final class UPnPEventListener: @unchecked Sendable {
                 switch state {
                 case .ready:
                     if guard_.tryResume() {
-                        if let nwPort = nwListener.port {
-                            self?.lock.lock()
-                            self?._port = nwPort.rawValue
-                            self?.lock.unlock()
+                        if let self, let nwPort = nwListener.port {
+                            self.lock.withLock { self._port = nwPort.rawValue }
                         }
                         continuation.resume()
                     }
@@ -213,9 +206,7 @@ public final class UPnPEventListener: @unchecked Sendable {
                 self?.handleConnection(connection)
             }
 
-            self.lock.lock()
-            self._listener = nwListener
-            self.lock.unlock()
+            self.lock.withLock { self._listener = nwListener }
             nwListener.start(queue: self.queue)
         }
     }
@@ -263,9 +254,7 @@ public final class UPnPEventListener: @unchecked Sendable {
         // Parse the event XML body
         guard !body.isEmpty else { return }
         if let properties = try? XMLResponseParser.parseEventBody(body) {
-            lock.lock()
-            let callback = _onEvent
-            lock.unlock()
+            let callback = lock.withLock { _onEvent }
             callback?(service, properties)
         }
     }
