@@ -147,7 +147,7 @@ struct NowPlayingView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color(nsColor: .controlBackgroundColor))
                             .overlay(
-                                Image(systemName: "music.note")
+                                Image(systemName: isTV ? "tv" : isLineIn ? "cable.connector" : "music.note")
                                     .font(.system(size: 40))
                                     .foregroundColor(.secondary)
                             )
