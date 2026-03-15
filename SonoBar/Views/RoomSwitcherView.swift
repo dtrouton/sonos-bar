@@ -53,6 +53,9 @@ struct RoomSwitcherView: View {
                 }
             }
         }
+        .onAppear {
+            Task { await appState.refreshAllRooms() }
+        }
     }
 
     private func roomRow(_ device: SonosDevice) -> some View {
