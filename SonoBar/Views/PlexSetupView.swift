@@ -8,11 +8,14 @@ import Darwin
 struct PlexSetupView: View {
     @Environment(AppState.self) private var appState
     @State private var serverIP = ""
-    @State private var token = ""
     @State private var errorMessage: String?
-    @State private var isConnecting = false
     @State private var isScanning = false
+    @State private var isAuthenticating = false
+    @State private var authPinId: Int?
     @State private var discoveredServers: [String] = []
+
+    private static let clientIdentifier = "com.sonobar.plex"
+    private static let productName = "SonoBar"
 
     private var isConnected: Bool {
         appState.plexClient != nil
@@ -58,7 +61,6 @@ struct PlexSetupView: View {
             Button("Disconnect") {
                 appState.disconnectPlex()
                 serverIP = ""
-                token = ""
                 errorMessage = nil
             }
             .buttonStyle(.bordered)
@@ -116,20 +118,6 @@ struct PlexSetupView: View {
                 }
             }
 
-            // Token
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Plex Token")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                SecureField("X-Plex-Token", text: $token)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
-                Text("Find your token at app.plex.tv/desktop > inspect network requests, or check Plex preferences XML.")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
             // Error display
             if let errorMessage {
                 HStack(spacing: 4) {
@@ -142,60 +130,144 @@ struct PlexSetupView: View {
                 }
             }
 
-            // Connect button
+            // Sign in button
             Button {
-                connect()
+                Task { await signInWithPlex() }
             } label: {
-                if isConnecting {
+                if isAuthenticating {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Connecting...")
+                        Text("Waiting for Plex sign-in...")
                     }
                 } else {
-                    Text("Connect")
+                    Label("Sign in with Plex", systemImage: "person.circle")
                 }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled(serverIP.isEmpty || token.isEmpty || isConnecting)
+            .disabled(serverIP.isEmpty || isAuthenticating)
+
+            if isAuthenticating {
+                Text("A browser window has opened. Sign in to your Plex account and click Allow.")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Cancel") {
+                    isAuthenticating = false
+                    authPinId = nil
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
         }
-    }
-
-    // MARK: - Actions
-
-    private func connect() {
-        errorMessage = nil
-        isConnecting = true
-        Task {
-            do {
-                let testClient = PlexClient(host: serverIP, token: token)
-                let libraries = try await testClient.getLibraries()
-                guard !libraries.isEmpty else {
-                    errorMessage = "No libraries found. Check server IP and token."
-                    isConnecting = false
-                    return
-                }
-                appState.connectPlex(host: serverIP, token: token)
-                isConnecting = false
-            } catch let error as PlexError {
-                switch error {
-                case .unauthorized:
-                    errorMessage = "Invalid token. Please check your Plex token."
-                case .serverUnreachable:
-                    errorMessage = "Cannot reach server at \(serverIP):32400."
-                case .invalidURL(let url):
-                    errorMessage = "Invalid URL: \(url)"
-                case .httpError(let code):
-                    errorMessage = "Server error (HTTP \(code))."
-                }
-                isConnecting = false
-            } catch {
-                errorMessage = "Connection failed: \(error.localizedDescription)"
-                isConnecting = false
+        .onAppear {
+            serverIP = UserDefaults.standard.string(forKey: "plexServerIP") ?? ""
+            if serverIP.isEmpty {
+                scanNetwork()
             }
         }
     }
+
+    // MARK: - Plex OAuth PIN Flow
+
+    private func signInWithPlex() async {
+        errorMessage = nil
+        isAuthenticating = true
+
+        do {
+            // Step 1: Request a PIN from plex.tv
+            let pin = try await requestPin()
+            authPinId = pin.id
+
+            // Step 2: Open browser for user to authorize
+            let authURL = "https://app.plex.tv/auth#?clientID=\(Self.clientIdentifier)&code=\(pin.code)&context%5Bdevice%5D%5Bproduct%5D=\(Self.productName)"
+            if let url = URL(string: authURL) {
+                NSWorkspace.shared.open(url)
+            }
+
+            // Step 3: Poll for the token (every 2 seconds, up to 2 minutes)
+            let token = try await pollForToken(pinId: pin.id)
+
+            // Step 4: Connect with the token
+            let testClient = PlexClient(host: serverIP, token: token)
+            let libraries = try await testClient.getLibraries()
+            guard !libraries.isEmpty else {
+                errorMessage = "Connected to Plex account but no libraries found on \(serverIP)."
+                isAuthenticating = false
+                return
+            }
+
+            appState.connectPlex(host: serverIP, token: token)
+            isAuthenticating = false
+        } catch PlexAuthError.cancelled {
+            isAuthenticating = false
+        } catch PlexAuthError.timeout {
+            errorMessage = "Sign-in timed out. Please try again."
+            isAuthenticating = false
+        } catch {
+            errorMessage = "Sign-in failed: \(error.localizedDescription)"
+            isAuthenticating = false
+        }
+    }
+
+    private struct PinResponse {
+        let id: Int
+        let code: String
+    }
+
+    private enum PlexAuthError: Error {
+        case cancelled
+        case timeout
+        case invalidResponse
+    }
+
+    private func requestPin() async throws -> PinResponse {
+        let url = URL(string: "https://plex.tv/api/v2/pins")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(Self.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
+        request.setValue(Self.productName, forHTTPHeaderField: "X-Plex-Product")
+        request.httpBody = "strong=true".data(using: .utf8)
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        struct PinJSON: Codable {
+            let id: Int
+            let code: String
+        }
+        let pin = try JSONDecoder().decode(PinJSON.self, from: data)
+        return PinResponse(id: pin.id, code: pin.code)
+    }
+
+    private func pollForToken(pinId: Int) async throws -> String {
+        for _ in 0..<60 { // 2 minutes at 2-second intervals
+            guard isAuthenticating else { throw PlexAuthError.cancelled }
+
+            try await Task.sleep(for: .seconds(2))
+
+            let url = URL(string: "https://plex.tv/api/v2/pins/\(pinId)")!
+            var request = URLRequest(url: url)
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue(Self.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
+
+            let (data, _) = try await URLSession.shared.data(for: request)
+
+            struct TokenResponse: Codable {
+                let authToken: String?
+            }
+            if let response = try? JSONDecoder().decode(TokenResponse.self, from: data),
+               let token = response.authToken, !token.isEmpty {
+                return token
+            }
+        }
+        throw PlexAuthError.timeout
+    }
+
+    // MARK: - Network Scan
 
     private func scanNetwork() {
         isScanning = true
@@ -210,7 +282,6 @@ struct PlexSetupView: View {
         }
     }
 
-    /// Scans the local subnet on port 32400 for Plex servers.
     private func scanSubnetForPlex() async -> [String] {
         guard let localIP = getLocalIP() else { return [] }
         let parts = localIP.split(separator: ".")
@@ -225,15 +296,12 @@ struct PlexSetupView: View {
                     guard let url = URL(string: urlString) else { return nil }
                     var request = URLRequest(url: url)
                     request.timeoutInterval = 0.3
-                    request.httpMethod = "GET"
                     do {
                         let (_, response) = try await URLSession.shared.data(for: request)
                         if let http = response as? HTTPURLResponse, http.statusCode == 200 {
                             return ip
                         }
-                    } catch {
-                        // Not a Plex server
-                    }
+                    } catch {}
                     return nil
                 }
             }
@@ -248,7 +316,6 @@ struct PlexSetupView: View {
         }
     }
 
-    /// Gets the local IP from network interfaces (same approach as AppState).
     private func getLocalIP() -> String? {
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else { return nil }
