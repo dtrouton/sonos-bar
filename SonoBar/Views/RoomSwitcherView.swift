@@ -63,18 +63,14 @@ struct RoomSwitcherView: View {
         let group = appState.deviceManager.group(for: device.uuid)
         let isGrouped = group.map { !$0.isStandalone } ?? false
         let groupBadge: String? = isGrouped ? "\(group?.members.count ?? 0)" : nil
-        let icon = device.modelName.lowercased().contains("sub") ? "hifispeaker.and.appletv" : "hifispeaker.fill"
+        let summary = appState.roomStates[device.uuid]
 
         return Button {
             appState.selectRoom(uuid: device.uuid)
             onRoomSelected()
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .frame(width: 36, height: 36)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .cornerRadius(8)
+                RoomArtworkView(summary: summary, speakerIP: appState.deviceManager.coordinatorIP(for: device.uuid))
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(device.roomName)
@@ -146,5 +142,59 @@ struct RoomSwitcherView: View {
         case .noMediaPresent:
             return "Idle"
         }
+    }
+}
+
+/// Shows album art for a room, or a contextual icon (TV, speaker) as fallback.
+private struct RoomArtworkView: View {
+    let summary: RoomSummary?
+    let speakerIP: String?
+    @State private var image: NSImage?
+
+    private var fallbackIcon: String {
+        guard let uri = summary?.trackURI else { return "hifispeaker.fill" }
+        if uri.hasPrefix("x-sonos-htastream:") { return "tv" }
+        if uri.hasPrefix("x-rincon-stream:") { return "cable.connector" }
+        return "hifispeaker.fill"
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Color(nsColor: .controlBackgroundColor)
+                    .overlay(
+                        Image(systemName: fallbackIcon)
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    )
+            }
+        }
+        .frame(width: 36, height: 36)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: summary?.albumArtURI) {
+            image = await loadImage()
+        }
+    }
+
+    private func loadImage() async -> NSImage? {
+        guard let artURI = summary?.albumArtURI, !artURI.isEmpty else { return nil }
+
+        let urlString: String
+        if artURI.hasPrefix("http://") || artURI.hasPrefix("https://") {
+            urlString = artURI
+        } else {
+            guard let ip = speakerIP else { return nil }
+            urlString = "http://\(ip):1400\(artURI)"
+        }
+
+        guard let url = URL(string: urlString),
+              let (data, _) = try? await URLSession.shared.data(from: url) else {
+            return nil
+        }
+        return NSImage(data: data)
     }
 }

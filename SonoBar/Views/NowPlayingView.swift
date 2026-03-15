@@ -26,8 +26,18 @@ struct NowPlayingView: View {
         return others.joined(separator: ", ")
     }
 
+    private var isTV: Bool {
+        appState.playbackState.currentTrack?.uri.hasPrefix("x-sonos-htastream:") == true
+    }
+
+    private var isLineIn: Bool {
+        appState.playbackState.currentTrack?.uri.hasPrefix("x-rincon-stream:") == true
+    }
+
     private var trackTitle: String {
-        appState.playbackState.currentTrack?.title ?? "Not Playing"
+        if isTV { return "TV" }
+        if isLineIn { return "Line-In" }
+        return appState.playbackState.currentTrack?.title ?? "Not Playing"
     }
 
     private var trackArtist: String {
@@ -168,7 +178,8 @@ struct NowPlayingView: View {
                 .padding(.horizontal, 16)
             }
 
-            // Progress (scrubbable)
+            // Progress (scrubbable) — hidden for TV/line-in which have no position data
+            if !isTV && !isLineIn {
             VStack(spacing: 4) {
                 Slider(value: $scrubProgress, in: 0...1) { editing in
                     isScrubbing = editing
@@ -194,6 +205,7 @@ struct NowPlayingView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            } // end if !isTV && !isLineIn
 
             // Transport controls
             HStack(spacing: 28) {
