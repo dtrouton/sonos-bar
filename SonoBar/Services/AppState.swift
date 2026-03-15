@@ -694,7 +694,9 @@ final class AppState {
     // MARK: - Plex Playback
 
     func playPlexAlbum(albumId: String, startTrackIndex: Int = 0, seekOffset: Int = 0) async {
-        guard let client = plexClient, let controller = activeController else { return }
+        guard let client = plexClient, let controller = activeController,
+              let device = deviceManager.activeDevice,
+              let group = deviceManager.group(for: device.uuid) else { return }
         do {
             let tracks = try await client.getTracks(albumId: albumId)
             guard !tracks.isEmpty else { return }
@@ -707,10 +709,11 @@ final class AppState {
                 try await controller.addToQueue(uri: audioURL.absoluteString, metadata: metadata)
             }
 
-            // Seek to the start track (1-based index)
+            // Point the transport at the queue, then seek to the right track
+            let queueURI = "x-rincon-queue:\(group.coordinatorUUID)#0"
+            try await controller.playURI(queueURI, metadata: "")
             let trackNumber = startTrackIndex + 1
             try await controller.seekToTrack(trackNumber)
-            try await controller.play()
 
             // If there's a seek offset, wait for PLAYING then seek
             if seekOffset > 0 {
@@ -738,15 +741,17 @@ final class AppState {
     }
 
     func playPlexSingleTrack(_ track: PlexTrack) async {
-        guard let client = plexClient, let controller = activeController else { return }
+        guard let client = plexClient, let controller = activeController,
+              let device = deviceManager.activeDevice,
+              let group = deviceManager.group(for: device.uuid) else { return }
         do {
             guard let audioURL = client.audioURL(partKey: track.partKey) else { return }
             let metadata = plexDIDL(track: track)
 
             try await controller.clearQueue()
             try await controller.addToQueue(uri: audioURL.absoluteString, metadata: metadata)
-            try await controller.seekToTrack(1)
-            try await controller.play()
+            let queueURI = "x-rincon-queue:\(group.coordinatorUUID)#0"
+            try await controller.playURI(queueURI, metadata: "")
 
             // Resume from saved position if there's a viewOffset
             if track.viewOffset > 0 {
