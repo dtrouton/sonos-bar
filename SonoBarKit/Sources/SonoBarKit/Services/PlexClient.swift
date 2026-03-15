@@ -75,15 +75,44 @@ public final class PlexClient: Sendable {
     // MARK: - Search
 
     /// Searches for albums matching a query, optionally within a specific section.
+    /// The hubs/search endpoint returns a different structure (Hub array) than other endpoints.
     public func search(query: String, sectionId: String? = nil) async throws -> [PlexAlbum] {
         var queryItems = [
             URLQueryItem(name: "query", value: query),
-            URLQueryItem(name: "type", value: "9"),
         ]
         if let sectionId {
             queryItems.append(URLQueryItem(name: "sectionId", value: sectionId))
         }
-        return try await get("/hubs/search", queryItems: queryItems)
+
+        let url = try buildURL(path: "/hubs/search", queryItems: queryItems)
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        applyHeaders(&request)
+        request.timeoutInterval = 10
+
+        let (data, httpResponse) = try await sendRequest(request)
+        try checkStatus(httpResponse)
+
+        // Parse the Hub structure: MediaContainer.Hub[].Metadata[]
+        struct HubResponse: Codable {
+            let MediaContainer: HubContainer
+        }
+        struct HubContainer: Codable {
+            let Hub: [Hub]?
+        }
+        struct Hub: Codable {
+            let type: String?
+            let Metadata: [PlexAlbum]?
+        }
+
+        let response = try JSONDecoder().decode(HubResponse.self, from: data)
+        // Extract albums from the "album" and "artist" hubs
+        var results: [PlexAlbum] = []
+        for hub in response.MediaContainer.Hub ?? [] {
+            guard hub.type == "album", let items = hub.Metadata else { continue }
+            results.append(contentsOf: items)
+        }
+        return results
     }
 
     // MARK: - Progress Reporting
