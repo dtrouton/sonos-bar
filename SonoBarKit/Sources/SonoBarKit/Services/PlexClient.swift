@@ -121,15 +121,17 @@ public final class PlexClient: Sendable {
     public func reportProgress(trackId: String, offsetMs: Int, duration: Int, state: String) async throws {
         let queryItems = [
             URLQueryItem(name: "ratingKey", value: trackId),
+            URLQueryItem(name: "key", value: "/library/metadata/\(trackId)"),
             URLQueryItem(name: "time", value: String(offsetMs)),
             URLQueryItem(name: "duration", value: String(duration)),
             URLQueryItem(name: "state", value: state),
-            URLQueryItem(name: "key", value: "/library/metadata/\(trackId)"),
+            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library"),
+            URLQueryItem(name: "X-Plex-Client-Identifier", value: "com.sonobar.plex"),
         ]
 
         let url = try buildURL(path: "/:/timeline", queryItems: queryItems)
         var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
+        request.httpMethod = "GET"
         applyHeaders(&request)
         request.timeoutInterval = 5
 
