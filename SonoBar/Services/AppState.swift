@@ -679,12 +679,12 @@ final class AppState {
         }
     }
 
-    func searchPlex(query: String) async {
+    func searchPlex(query: String, sectionId: String? = nil) async {
         guard let client = plexClient else { return }
         isPlexLoading = true
         defer { isPlexLoading = false }
         do {
-            plexAlbums = try await client.search(query: query)
+            plexAlbums = try await client.search(query: query, sectionId: sectionId)
             plexError = nil
         } catch {
             plexError = "Search failed: \(error.localizedDescription)"

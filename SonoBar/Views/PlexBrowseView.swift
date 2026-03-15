@@ -15,13 +15,56 @@ struct PlexBrowseView: View {
 
     @State private var navigationPath: [PlexNav] = []
 
+    /// The current library section ID when browsing inside a library, for scoped search.
+    private var currentSectionId: String? {
+        for nav in navigationPath {
+            if case .albumList(let library) = nav { return library.id }
+        }
+        return nil
+    }
+
     var body: some View {
         if appState.plexClient == nil {
             PlexSetupView()
         } else {
             VStack(spacing: 0) {
+                // Search bar — always visible
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField(searchPlaceholder, text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                        .onChange(of: searchText) { _, newValue in
+                            searchTask?.cancel()
+                            if newValue.isEmpty {
+                                appState.plexAlbums = []
+                                return
+                            }
+                            searchTask = Task {
+                                try? await Task.sleep(nanoseconds: 300_000_000)
+                                guard !Task.isCancelled else { return }
+                                await appState.searchPlex(query: newValue, sectionId: currentSectionId)
+                            }
+                        }
+                    if !searchText.isEmpty {
+                        Button { searchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(8)
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+
                 // Back button when navigated deeper
-                if !navigationPath.isEmpty {
+                if !navigationPath.isEmpty && searchText.isEmpty {
                     HStack(spacing: 4) {
                         Button {
                             navigationPath.removeLast()
@@ -38,34 +81,46 @@ struct PlexBrowseView: View {
                         Spacer()
                     }
                     .padding(.horizontal, 12)
-                    .padding(.top, 8)
                     .padding(.bottom, 4)
                 }
 
-                // Show current level
-                switch navigationPath.last {
-                case .albumList(let library):
+                if !searchText.isEmpty {
+                    // Search results overlay any navigation level
                     PlexAlbumListView(
-                        libraryTitle: library.title,
+                        libraryTitle: "Search Results",
                         albums: appState.plexAlbums,
                         isLoading: appState.isPlexLoading
                     ) { album in
+                        searchText = ""
                         Task { await appState.loadPlexTracks(albumId: album.id) }
                         navigationPath.append(.trackList(album: album))
                     }
-                    .onAppear {
-                        Task { await appState.loadPlexAlbums(sectionId: library.id) }
+                } else {
+                    // Show current level
+                    switch navigationPath.last {
+                    case .albumList(let library):
+                        PlexAlbumListView(
+                            libraryTitle: library.title,
+                            albums: appState.plexAlbums,
+                            isLoading: appState.isPlexLoading
+                        ) { album in
+                            Task { await appState.loadPlexTracks(albumId: album.id) }
+                            navigationPath.append(.trackList(album: album))
+                        }
+                        .onAppear {
+                            Task { await appState.loadPlexAlbums(sectionId: library.id) }
+                        }
+
+                    case .trackList(let album):
+                        PlexTrackListView(
+                            album: album,
+                            tracks: appState.plexTracks,
+                            isLoading: appState.isPlexLoading
+                        )
+
+                    case nil:
+                        plexHome
                     }
-
-                case .trackList(let album):
-                    PlexTrackListView(
-                        album: album,
-                        tracks: appState.plexTracks,
-                        isLoading: appState.isPlexLoading
-                    )
-
-                case nil:
-                    plexHome
                 }
             }
             .onAppear {
@@ -77,56 +132,17 @@ struct PlexBrowseView: View {
         }
     }
 
+    private var searchPlaceholder: String {
+        if let nav = navigationPath.last, case .albumList(let lib) = nav {
+            return "Search \(lib.title)"
+        }
+        return "Search Plex"
+    }
+
     // MARK: - Plex Home
 
     private var plexHome: some View {
         VStack(spacing: 0) {
-            // Search bar
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                TextField("Search Plex", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .onChange(of: searchText) { _, newValue in
-                        searchTask?.cancel()
-                        if newValue.isEmpty {
-                            appState.plexAlbums = []
-                            return
-                        }
-                        searchTask = Task {
-                            try? await Task.sleep(nanoseconds: 300_000_000)
-                            guard !Task.isCancelled else { return }
-                            await appState.searchPlex(query: newValue)
-                        }
-                    }
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
-
-            if !searchText.isEmpty {
-                // Search results
-                PlexAlbumListView(
-                    libraryTitle: "Search Results",
-                    albums: appState.plexAlbums,
-                    isLoading: appState.isPlexLoading
-                ) { album in
-                    Task { await appState.loadPlexTracks(albumId: album.id) }
-                    navigationPath.append(.trackList(album: album))
-                }
-            } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         // Continue Listening section
@@ -227,7 +243,7 @@ struct PlexBrowseView: View {
                 }
             }
         }
-    }
+
 
     // MARK: - On Deck Row
 
