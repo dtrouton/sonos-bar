@@ -35,6 +35,7 @@ final class AppState {
     let mediaKeyController = MediaKeyController()
     var recentItems: [ContentItem] = []
     private var lastMediaURI: String?
+    private var lastTrackURI: String?
     private static let maxRecents = 50
     private static let recentsKey = "recentItems"
 
@@ -123,12 +124,16 @@ final class AppState {
 
         await loadAlbumArt()
 
-        // Track recents: when the media source changes, record it
+        // Track recents: when the media source changes, record it.
+        // Check both media URI and track URI — for queue-based playback (Plex, Audible)
+        // the media URI stays the same (x-rincon-queue:...) even when content changes.
+        let currentTrackURI = currentTrack?.uri
         if transportState == .playing || transportState == .pausedPlayback {
             if let mediaInfo = try? await controller.getMediaInfo(),
                !mediaInfo.uri.isEmpty,
-               mediaInfo.uri != lastMediaURI {
+               (mediaInfo.uri != lastMediaURI || currentTrackURI != lastTrackURI) {
                 lastMediaURI = mediaInfo.uri
+                lastTrackURI = currentTrackURI
 
                 var recentURI = mediaInfo.uri
                 var recentDIDL = mediaInfo.metadata
