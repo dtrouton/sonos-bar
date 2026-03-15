@@ -238,13 +238,15 @@ final class AppState {
             }
             roomStates = newStates
 
-            // Capture playing/paused content from all rooms as recents.
-            // Use the media URI (album-level) when replayable — this covers
-            // Apple Music, Spotify, radio, and other services at the right level.
-            // Plex queue content is filtered out (x-rincon-queue:) and handled
-            // by its own recents flow.
+            // Capture content loaded on all rooms as recents.
+            // Includes playing, paused, AND stopped — stopped content is still
+            // loaded on the speaker and will resume if you hit play.
+            // Uses the media URI (album-level) when replayable — covers
+            // Audible, Apple Music, Spotify, radio, and other services.
+            // Plex queue content filtered out (x-rincon-queue:) — handled separately.
             for (_, summary) in coordinatorSummaries {
-                guard summary.transportState == .playing || summary.transportState == .pausedPlayback,
+                guard summary.transportState != .transitioning,
+                      summary.transportState != .noMediaPresent,
                       let title = summary.trackTitle, !title.isEmpty else { continue }
 
                 // Prefer the media URI (album/station level) over track URI
