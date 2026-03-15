@@ -2,8 +2,14 @@
 import SwiftUI
 import SonoBarKit
 
+enum BrowseSegment: String, CaseIterable {
+    case recents = "Recents"
+    case plex = "Plex"
+}
+
 struct BrowseView: View {
     @Environment(AppState.self) private var appState
+    @State private var segment: BrowseSegment = .recents
     @State private var searchText = ""
 
     private var filteredItems: [ContentItem] {
@@ -15,6 +21,30 @@ struct BrowseView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            // Segment picker
+            Picker("", selection: $segment) {
+                ForEach(BrowseSegment.allCases, id: \.self) { seg in
+                    Text(seg.rawValue).tag(seg)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+
+            switch segment {
+            case .recents:
+                recentsContent
+            case .plex:
+                PlexBrowseView()
+            }
+        }
+    }
+
+    // MARK: - Recents Content
+
+    private var recentsContent: some View {
         VStack(spacing: 0) {
             // Search bar
             HStack {
@@ -36,7 +66,7 @@ struct BrowseView: View {
             .background(Color(nsColor: .controlBackgroundColor))
             .cornerRadius(8)
             .padding(.horizontal, 12)
-            .padding(.top, 10)
+            .padding(.top, 6)
             .padding(.bottom, 8)
 
             if filteredItems.isEmpty {

@@ -25,6 +25,9 @@
 		C5BA2C06F8F13D25501050EB /* SonoBarKit in Frameworks */ = {isa = PBXBuildFile; productRef = C47C1DE3A31D9B47495857F8 /* SonoBarKit */; };
 		PLEX01SETUP01VIEW0BUILDREF /* PlexSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX01SETUP01VIEW0FILEREF /* PlexSetupView.swift */; };
 		PLEX01KEYCH01HELP0BUILDREF /* PlexKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX01KEYCH01HELP0FILEREF /* PlexKeychain.swift */; };
+		PLEX02BROWS01VIEW0BUILDREF /* PlexBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX02BROWS01VIEW0FILEREF /* PlexBrowseView.swift */; };
+		PLEX03ALBUM01LIST0BUILDREF /* PlexAlbumListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX03ALBUM01LIST0FILEREF /* PlexAlbumListView.swift */; };
+		PLEX04TRACK01LIST0BUILDREF /* PlexTrackListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX04TRACK01LIST0FILEREF /* PlexTrackListView.swift */; };
 		FD51B87724CFCFDC95F6B0A9 /* SonoBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9326A0F381A56CC142EDB979 /* SonoBarApp.swift */; };
 /* End PBXBuildFile section */
 
@@ -48,6 +51,9 @@
 		D0812108F6CC4FF0BFDECF9D /* SonoBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonoBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6BC742E9E247E08DF56EF6B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		PLEX01SETUP01VIEW0FILEREF /* PlexSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexSetupView.swift; sourceTree = "<group>"; };
+		PLEX02BROWS01VIEW0FILEREF /* PlexBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexBrowseView.swift; sourceTree = "<group>"; };
+		PLEX03ALBUM01LIST0FILEREF /* PlexAlbumListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexAlbumListView.swift; sourceTree = "<group>"; };
+		PLEX04TRACK01LIST0FILEREF /* PlexTrackListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexTrackListView.swift; sourceTree = "<group>"; };
 		PLEX01KEYCH01HELP0FILEREF /* PlexKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexKeychain.swift; sourceTree = "<group>"; };
 		FBBDA7A4ABF3A635C1A6C887 /* VolumeSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeSliderView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -130,6 +136,9 @@
 				52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */,
 				QUEUE01LIST001VIEW0FILEREF /* QueueListView.swift */,
 				CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */,
+				PLEX02BROWS01VIEW0FILEREF /* PlexBrowseView.swift */,
+				PLEX03ALBUM01LIST0FILEREF /* PlexAlbumListView.swift */,
+				PLEX04TRACK01LIST0FILEREF /* PlexTrackListView.swift */,
 				PLEX01SETUP01VIEW0FILEREF /* PlexSetupView.swift */,
 				09818E01943EFFEBABA7691D /* PopoverContentView.swift */,
 				34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */,
@@ -219,6 +228,9 @@
 				28806D365CEAE34308004FF2 /* MediaKeyController.swift in Sources */,
 				553D7BE3098C9639F29378D6 /* NowPlayingView.swift in Sources */,
 				PLEX01KEYCH01HELP0BUILDREF /* PlexKeychain.swift in Sources */,
+				PLEX02BROWS01VIEW0BUILDREF /* PlexBrowseView.swift in Sources */,
+				PLEX03ALBUM01LIST0BUILDREF /* PlexAlbumListView.swift in Sources */,
+				PLEX04TRACK01LIST0BUILDREF /* PlexTrackListView.swift in Sources */,
 				PLEX01SETUP01VIEW0BUILDREF /* PlexSetupView.swift in Sources */,
 				8BCEDD853BCCC339DE161B46 /* PopoverContentView.swift in Sources */,
 				0F33F3ED2BD864B9851AFB8D /* RoomSwitcherView.swift in Sources */,

@@ -3,7 +3,7 @@ import Foundation
 // MARK: - PlexLibrary
 
 /// A Plex media library (e.g. "Music", "Audiobooks").
-public struct PlexLibrary: Identifiable, Sendable, Codable {
+public struct PlexLibrary: Identifiable, Sendable, Codable, Equatable {
     public let id: String
     public let title: String
     public let type: String
@@ -18,7 +18,7 @@ public struct PlexLibrary: Identifiable, Sendable, Codable {
 // MARK: - PlexAlbum
 
 /// A Plex album or audiobook container.
-public struct PlexAlbum: Identifiable, Sendable, Codable {
+public struct PlexAlbum: Identifiable, Sendable, Codable, Equatable {
     public let id: String
     public let title: String
     public let artist: String
