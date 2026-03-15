@@ -81,11 +81,11 @@ extension PlexTrack: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
-        albumTitle = try container.decode(String.self, forKey: .albumTitle)
-        artistName = try container.decode(String.self, forKey: .artistName)
-        duration = try container.decode(Int.self, forKey: .duration)
+        albumTitle = try container.decodeIfPresent(String.self, forKey: .albumTitle) ?? ""
+        artistName = try container.decodeIfPresent(String.self, forKey: .artistName) ?? ""
+        duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
         viewOffset = try container.decodeIfPresent(Int.self, forKey: .viewOffset) ?? 0
-        index = try container.decode(Int.self, forKey: .index)
+        index = try container.decodeIfPresent(Int.self, forKey: .index) ?? 0
         thumbPath = try container.decodeIfPresent(String.self, forKey: .thumbPath)
 
         // lastViewedAt is a Unix timestamp in the JSON
