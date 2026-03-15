@@ -11,6 +11,7 @@ struct RoomSummary: Equatable {
     let transportState: TransportState
     let trackTitle: String?
     let trackArtist: String?
+    let trackURI: String?
 }
 
 @MainActor
@@ -200,7 +201,8 @@ final class AppState {
                     let summary = RoomSummary(
                         transportState: transport,
                         trackTitle: track?.title,
-                        trackArtist: track?.artist
+                        trackArtist: track?.artist,
+                        trackURI: track?.uri
                     )
                     // Return coordinator UUID as key; we'll map to all members below
                     return (group.coordinatorUUID, summary)

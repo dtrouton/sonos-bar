@@ -118,6 +118,16 @@ struct RoomSwitcherView: View {
         guard let summary = appState.roomStates[device.uuid] else {
             return device.modelName.isEmpty ? "Sonos" : device.modelName
         }
+        // Detect source from URI
+        if let uri = summary.trackURI {
+            if uri.hasPrefix("x-sonos-htastream:") {
+                return summary.transportState == .playing ? "TV" : "TV (paused)"
+            }
+            if uri.hasPrefix("x-rincon-stream:") {
+                return summary.transportState == .playing ? "Line-In" : "Line-In (paused)"
+            }
+        }
+
         switch summary.transportState {
         case .playing:
             if let title = summary.trackTitle {
