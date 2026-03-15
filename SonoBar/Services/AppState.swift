@@ -13,6 +13,8 @@ struct RoomSummary: Equatable {
     let trackArtist: String?
     let trackURI: String?
     let albumArtURI: String?
+    let mediaURI: String?
+    let mediaDIDL: String?
 }
 
 @MainActor
@@ -204,14 +206,16 @@ final class AppState {
                     let controller = PlaybackController(client: client)
                     let transport = (try? await controller.getTransportState()) ?? .stopped
                     let track = try? await controller.getPositionInfo()
+                    let media = try? await controller.getMediaInfo()
                     let summary = RoomSummary(
                         transportState: transport,
                         trackTitle: track?.title,
                         trackArtist: track?.artist,
                         trackURI: track?.uri,
-                        albumArtURI: track?.albumArtURI
+                        albumArtURI: track?.albumArtURI,
+                        mediaURI: media?.uri,
+                        mediaDIDL: media?.metadata
                     )
-                    // Return coordinator UUID as key; we'll map to all members below
                     return (group.coordinatorUUID, summary)
                 }
             }
@@ -234,20 +238,35 @@ final class AppState {
             }
             roomStates = newStates
 
-            // Capture playing/paused stream content from all rooms as recents.
-            // Only streams/radio where the track URI IS the replayable source —
-            // skip individual track URIs (Plex, Audible) which are handled separately.
+            // Capture playing/paused content from all rooms as recents.
+            // Use the media URI (album-level) when replayable — this covers
+            // Apple Music, Spotify, radio, and other services at the right level.
+            // Plex queue content is filtered out (x-rincon-queue:) and handled
+            // by its own recents flow.
             for (_, summary) in coordinatorSummaries {
                 guard summary.transportState == .playing || summary.transportState == .pausedPlayback,
-                      let uri = summary.trackURI, !uri.isEmpty,
-                      let title = summary.trackTitle, !title.isEmpty,
-                      Self.isStreamURI(uri) else { continue }
+                      let title = summary.trackTitle, !title.isEmpty else { continue }
+
+                // Prefer the media URI (album/station level) over track URI
+                let uri: String
+                let didl: String
+                if let mediaURI = summary.mediaURI, !mediaURI.isEmpty, Self.isReplayableURI(mediaURI) {
+                    uri = mediaURI
+                    didl = summary.mediaDIDL ?? ""
+                } else if let trackURI = summary.trackURI, !trackURI.isEmpty, Self.isStreamURI(trackURI) {
+                    // Fallback to track URI for streams where media URI isn't useful
+                    uri = trackURI
+                    didl = ""
+                } else {
+                    continue
+                }
+
                 let item = ContentItem(
                     id: uri,
                     title: title,
                     albumArtURI: summary.albumArtURI,
                     resourceURI: uri,
-                    rawDIDL: "",
+                    rawDIDL: didl,
                     itemClass: "object.item.audioItem",
                     description: summary.trackArtist
                 )
