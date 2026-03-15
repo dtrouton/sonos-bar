@@ -11,6 +11,7 @@ public enum TransportState: String, Sendable, Equatable {
     case pausedPlayback = "PAUSED_PLAYBACK"
     case stopped = "STOPPED"
     case transitioning = "TRANSITIONING"
+    case noMediaPresent = "NO_MEDIA_PRESENT"
 }
 
 // MARK: - TrackInfo

@@ -101,11 +101,10 @@ public final class PlaybackController: Sendable {
             action: "GetTransportInfo",
             params: [("InstanceID", "0")]
         )
-        guard let stateString = result["CurrentTransportState"],
-              let state = TransportState(rawValue: stateString) else {
-            throw SOAPError(code: -1, message: "Unknown transport state")
+        guard let stateString = result["CurrentTransportState"] else {
+            return .stopped
         }
-        return state
+        return TransportState(rawValue: stateString) ?? .stopped
     }
 
     /// Gets the current position/track info.

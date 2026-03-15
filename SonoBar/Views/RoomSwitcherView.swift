@@ -133,6 +133,8 @@ struct RoomSwitcherView: View {
             return "Idle"
         case .transitioning:
             return "Loading..."
+        case .noMediaPresent:
+            return "Idle"
         }
     }
 }
