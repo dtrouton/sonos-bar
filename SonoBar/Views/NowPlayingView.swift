@@ -60,6 +60,7 @@ struct NowPlayingView: View {
 
     private var sourceBadge: String {
         guard let uri = appState.playbackState.currentTrack?.uri else { return "" }
+        if let plexHost = appState.plexClient?.host, uri.contains(plexHost) { return "Plex" }
         if uri.contains("spotify") { return "Spotify" }
         if uri.contains("apple") { return "Apple Music" }
         if uri.contains("tidal") { return "Tidal" }
@@ -292,7 +293,10 @@ struct NowPlayingView: View {
             scrubProgress = progress
             Task { await appState.refreshSleepTimer() }
             refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                Task { await appState.refreshPlayback() }
+                Task {
+                    await appState.refreshPlayback()
+                    await appState.reportPlexProgressIfNeeded()
+                }
             }
         }
         .onDisappear {
