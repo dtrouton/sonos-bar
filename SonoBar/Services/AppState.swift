@@ -234,12 +234,14 @@ final class AppState {
             }
             roomStates = newStates
 
-            // Capture playing/paused content from all rooms as recents
+            // Capture playing/paused stream content from all rooms as recents.
+            // Only streams/radio where the track URI IS the replayable source —
+            // skip individual track URIs (Plex, Audible) which are handled separately.
             for (_, summary) in coordinatorSummaries {
                 guard summary.transportState == .playing || summary.transportState == .pausedPlayback,
                       let uri = summary.trackURI, !uri.isEmpty,
                       let title = summary.trackTitle, !title.isEmpty,
-                      Self.isReplayableURI(uri) else { continue }
+                      Self.isStreamURI(uri) else { continue }
                 let item = ContentItem(
                     id: uri,
                     title: title,
@@ -484,6 +486,20 @@ final class AppState {
             "x-sonos-htastream:",   // TV/HDMI audio
         ]
         return !nonReplayable.contains { uri.hasPrefix($0) }
+    }
+
+    /// Returns true if the URI is a stream/radio where the track URI is the replayable source.
+    /// Used for room-level recents capture (vs individual tracks from queues).
+    private static func isStreamURI(_ uri: String) -> Bool {
+        let streamPrefixes = [
+            "x-sonosapi-stream:",       // Sonos service streams (BBC Sounds, etc.)
+            "x-sonosapi-hls-static:",   // HLS streams
+            "x-sonosapi-radio:",        // Sonos radio
+            "x-rincon-mp3radio:",       // MP3 radio streams
+            "aac:",                     // AAC radio streams
+            "hls:",                     // HLS radio
+        ]
+        return streamPrefixes.contains { uri.hasPrefix($0) }
     }
 
     /// Parses "HH:MM:SS" into total seconds.
