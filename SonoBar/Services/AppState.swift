@@ -29,7 +29,7 @@ final class AppState {
     var albumArtImage: NSImage? = nil
     var isLoading = true
     private(set) var activeController: PlaybackController?
-    private let artworkCache = ArtworkCache()
+    private let artworkCache = ArtworkCache.shared
     /// Playback summary keyed by device UUID, populated for all rooms.
     var roomStates: [String: RoomSummary] = [:]
     let mediaKeyController = MediaKeyController()

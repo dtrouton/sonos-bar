@@ -74,10 +74,6 @@ private struct GridArtworkView: View {
             urlString = "http://\(ip):1400\(artURI)"
         }
 
-        guard let url = URL(string: urlString),
-              let (data, _) = try? await URLSession.shared.data(from: url) else {
-            return nil
-        }
-        return NSImage(data: data)
+        return await ArtworkCache.shared.image(for: urlString)
     }
 }

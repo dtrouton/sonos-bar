@@ -315,9 +315,6 @@ struct PlexArtworkView: View {
               let url = appState.plexClient?.thumbURL(path: thumbPath) else {
             return nil
         }
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else {
-            return nil
-        }
-        return NSImage(data: data)
+        return await ArtworkCache.shared.image(for: url.absoluteString)
     }
 }
