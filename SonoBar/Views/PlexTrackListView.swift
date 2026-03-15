@@ -43,7 +43,7 @@ struct PlexTrackListView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .lineLimit(2)
                                 .multilineTextAlignment(.center)
-                            Text(album.artist)
+                            Text(album.artist ?? "")
                                 .font(.system(size: 11))
                                 .foregroundColor(.secondary)
                         }

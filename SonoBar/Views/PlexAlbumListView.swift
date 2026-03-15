@@ -42,7 +42,7 @@ struct PlexAlbumListView: View {
                                         .font(.system(size: 10))
                                         .lineLimit(2)
                                         .multilineTextAlignment(.center)
-                                    Text(album.artist)
+                                    Text(album.artist ?? "")
                                         .font(.system(size: 9))
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)

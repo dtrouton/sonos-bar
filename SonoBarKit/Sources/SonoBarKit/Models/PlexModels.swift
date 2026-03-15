@@ -21,9 +21,9 @@ public struct PlexLibrary: Identifiable, Sendable, Codable, Equatable {
 public struct PlexAlbum: Identifiable, Sendable, Codable, Equatable {
     public let id: String
     public let title: String
-    public let artist: String
+    public let artist: String?
     public let thumbPath: String?
-    public let trackCount: Int
+    public let trackCount: Int?
     public let year: Int?
     public let viewOffset: Int?
 
