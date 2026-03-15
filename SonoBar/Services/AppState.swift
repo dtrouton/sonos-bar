@@ -735,9 +735,11 @@ final class AppState {
             }
 
             activePlexAlbumId = albumId
-            if startTrackIndex < tracks.count {
-                activePlexTrackId = tracks[startTrackIndex].id
-            }
+            let playingTrack = tracks[min(startTrackIndex, tracks.count - 1)]
+            activePlexTrackId = playingTrack.id
+
+            // Add to recents directly — we have all the info, don't rely on Sonos roundtrip
+            addPlexRecent(track: playingTrack)
 
             await refreshPlayback()
         } catch {
@@ -776,10 +778,29 @@ final class AppState {
             activePlexTrackId = track.id
             activePlexAlbumId = nil
 
+            addPlexRecent(track: track)
+
             await refreshPlayback()
         } catch {
             plexError = "Playback failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Adds a Plex track to recents with its audio URL as the replayable URI.
+    private func addPlexRecent(track: PlexTrack) {
+        guard let client = plexClient,
+              let audioURL = client.audioURL(partKey: track.partKey) else { return }
+        let artURL = track.thumbPath.flatMap { client.thumbURL(path: $0)?.absoluteString }
+        let item = ContentItem(
+            id: audioURL.absoluteString,
+            title: track.albumTitle.isEmpty ? track.title : track.albumTitle,
+            albumArtURI: artURL,
+            resourceURI: audioURL.absoluteString,
+            rawDIDL: plexDIDL(track: track),
+            itemClass: "object.item.audioItem",
+            description: track.artistName.isEmpty ? nil : track.artistName
+        )
+        addRecent(item)
     }
 
     private func waitForPlaying() async throws {
@@ -797,6 +818,10 @@ final class AppState {
         let title = xmlEscape(track.title)
         let creator = xmlEscape(track.artistName)
         let album = xmlEscape(track.albumTitle)
+        var artTag = ""
+        if let thumbPath = track.thumbPath, let url = plexClient?.thumbURL(path: thumbPath) {
+            artTag = "<upnp:albumArtURI>\(xmlEscape(url.absoluteString))</upnp:albumArtURI>"
+        }
         return """
         <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" \
         xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" \
@@ -804,6 +829,7 @@ final class AppState {
         <item><dc:title>\(title)</dc:title>\
         <dc:creator>\(creator)</dc:creator>\
         <upnp:album>\(album)</upnp:album>\
+        \(artTag)\
         <upnp:class>object.item.audioItem.musicTrack</upnp:class>\
         </item></DIDL-Lite>
         """
