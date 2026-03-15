@@ -233,6 +233,24 @@ final class AppState {
                 }
             }
             roomStates = newStates
+
+            // Capture playing/paused content from all rooms as recents
+            for (_, summary) in coordinatorSummaries {
+                guard summary.transportState == .playing || summary.transportState == .pausedPlayback,
+                      let uri = summary.trackURI, !uri.isEmpty,
+                      let title = summary.trackTitle, !title.isEmpty,
+                      Self.isReplayableURI(uri) else { continue }
+                let item = ContentItem(
+                    id: uri,
+                    title: title,
+                    albumArtURI: summary.albumArtURI,
+                    resourceURI: uri,
+                    rawDIDL: "",
+                    itemClass: "object.item.audioItem",
+                    description: summary.trackArtist
+                )
+                addRecent(item)
+            }
         }
     }
 
