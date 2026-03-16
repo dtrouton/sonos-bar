@@ -27,6 +27,7 @@
 		PLEX01KEYCH01HELP0BUILDREF /* PlexKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX01KEYCH01HELP0FILEREF /* PlexKeychain.swift */; };
 		AUD001KEYCH001HELP0BUILDR /* AudibleKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUD001KEYCH001HELP0FILERE /* AudibleKeychain.swift */; };
 		AUD002PARAM001DISC0BUILDR /* SonosAudibleParams.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUD002PARAM001DISC0FILERE /* SonosAudibleParams.swift */; };
+		AUD003SETUP001VIEW0BUILDR /* AudibleSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUD003SETUP001VIEW0FILERE /* AudibleSetupView.swift */; };
 		PLEX02BROWS01VIEW0BUILDREF /* PlexBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX02BROWS01VIEW0FILEREF /* PlexBrowseView.swift */; };
 		PLEX03ALBUM01LIST0BUILDREF /* PlexAlbumListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX03ALBUM01LIST0FILEREF /* PlexAlbumListView.swift */; };
 		PLEX04TRACK01LIST0BUILDREF /* PlexTrackListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX04TRACK01LIST0FILEREF /* PlexTrackListView.swift */; };
@@ -59,6 +60,7 @@
 		PLEX01KEYCH01HELP0FILEREF /* PlexKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexKeychain.swift; sourceTree = "<group>"; };
 		AUD001KEYCH001HELP0FILERE /* AudibleKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudibleKeychain.swift; sourceTree = "<group>"; };
 		AUD002PARAM001DISC0FILERE /* SonosAudibleParams.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosAudibleParams.swift; sourceTree = "<group>"; };
+		AUD003SETUP001VIEW0FILERE /* AudibleSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudibleSetupView.swift; sourceTree = "<group>"; };
 		FBBDA7A4ABF3A635C1A6C887 /* VolumeSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeSliderView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -135,6 +137,7 @@
 			children = (
 				C2B4BECB3532BB5092506158 /* AlarmFormView.swift */,
 				6AE39ED123CAC10B8001B1C0 /* AlarmsView.swift */,
+				AUD003SETUP001VIEW0FILERE /* AudibleSetupView.swift */,
 				BB389F9F52B80716CD445D77 /* BrowseView.swift */,
 				C12E5D60423F51E2C500E16A /* ContentGridView.swift */,
 				52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */,
@@ -227,6 +230,7 @@
 				0536F53032789CC218E34D83 /* AppDelegate.swift in Sources */,
 				4689D6ADC8B48002E108A687 /* AppState.swift in Sources */,
 				AUD001KEYCH001HELP0BUILDR /* AudibleKeychain.swift in Sources */,
+				AUD003SETUP001VIEW0BUILDR /* AudibleSetupView.swift in Sources */,
 				8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */,
 				827BD66207075FB6075E8145 /* BrowseView.swift in Sources */,
 				5C29513A59EF5A02C0229FCD /* ContentGridView.swift in Sources */,

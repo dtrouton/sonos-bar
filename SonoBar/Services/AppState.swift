@@ -76,6 +76,7 @@ final class AppState {
         updateActiveController()
         loadRecents()
         initPlexIfConfigured()
+        initAudibleIfConfigured()
         await refreshPlayback()
         await refreshAllRooms()
         await startEventListener()
@@ -273,6 +274,14 @@ final class AppState {
                     description: summary.trackArtist
                 )
                 addRecent(item)
+            }
+
+            // Discover Audible Sonos service params if not yet found
+            if sonosAudibleParams == nil {
+                if let params = SonosAudibleParams.discover(from: newStates) {
+                    sonosAudibleParams = params
+                    params.save()
+                }
             }
         }
     }
@@ -940,5 +949,170 @@ final class AppState {
             print("[Plex] Progress report failed: \(error)")
             #endif
         }
+    }
+
+    // MARK: - Audible Integration
+
+    private(set) var audibleClient: AudibleClient?
+    var audibleBooks: [AudibleBook] = []
+    var audibleChapters: [AudibleChapter] = []
+    var audibleOnDeck: [(book: AudibleBook, positionMs: Int)] = []
+    var audibleError: String?
+    var isAudibleLoading = false
+    private(set) var sonosAudibleParams: SonosAudibleParams?
+
+    func connectAudible(marketplace: String, adpToken: String, privateKeyPEM: String,
+                        accessToken: String, refreshToken: String, deviceSerial: String) {
+        AudibleKeychain.setAccessToken(accessToken)
+        AudibleKeychain.setRefreshToken(refreshToken)
+        AudibleKeychain.setAdpToken(adpToken)
+        AudibleKeychain.setPrivateKeyPEM(privateKeyPEM)
+        AudibleKeychain.setDeviceSerial(deviceSerial)
+
+        audibleClient = AudibleClient(
+            marketplace: marketplace,
+            adpToken: adpToken,
+            privateKeyPEM: privateKeyPEM,
+            accessToken: accessToken
+        )
+        audibleError = nil
+        Task { await loadAudibleLibrary() }
+    }
+
+    func disconnectAudible() {
+        AudibleKeychain.deleteAll()
+        SonosAudibleParams.clear()
+        audibleClient = nil
+        audibleBooks = []
+        audibleChapters = []
+        audibleOnDeck = []
+        audibleError = nil
+        isAudibleLoading = false
+        sonosAudibleParams = nil
+    }
+
+    func initAudibleIfConfigured() {
+        guard let adpToken = AudibleKeychain.getAdpToken(),
+              let privateKey = AudibleKeychain.getPrivateKeyPEM(),
+              let accessToken = AudibleKeychain.getAccessToken() else { return }
+
+        // Derive marketplace from the auth domain
+        let marketplace = String(AudibleAuth.domain.dropFirst("amazon.".count))
+
+        audibleClient = AudibleClient(
+            marketplace: marketplace,
+            adpToken: adpToken,
+            privateKeyPEM: privateKey,
+            accessToken: accessToken
+        )
+
+        // Load cached Sonos params
+        sonosAudibleParams = SonosAudibleParams.load()
+
+        Task { await loadAudibleLibrary() }
+    }
+
+    func loadAudibleLibrary() async {
+        guard let client = audibleClient else { return }
+        isAudibleLoading = true
+        defer { isAudibleLoading = false }
+        do {
+            audibleBooks = try await client.getLibrary()
+            audibleError = nil
+        } catch {
+            audibleError = "Failed to load library: \(error.localizedDescription)"
+        }
+    }
+
+    func loadAudibleChapters(asin: String) async {
+        guard let client = audibleClient else { return }
+        isAudibleLoading = true
+        defer { isAudibleLoading = false }
+        do {
+            audibleChapters = try await client.getChapters(asin: asin)
+            audibleError = nil
+        } catch {
+            audibleError = "Failed to load chapters: \(error.localizedDescription)"
+        }
+    }
+
+    func loadAudibleOnDeck() async {
+        guard let client = audibleClient else { return }
+        isAudibleLoading = true
+        defer { isAudibleLoading = false }
+        do {
+            // 1. Fetch library
+            let books = try await client.getLibrary()
+            audibleBooks = books
+
+            // 2. Batch fetch listening positions
+            let asins = books.map(\.asin)
+            guard !asins.isEmpty else {
+                audibleOnDeck = []
+                return
+            }
+            let positions = try await client.getListeningPositions(asins: asins)
+
+            // 3. Filter books with position > 0 and pair with position
+            let positionMap = Dictionary(uniqueKeysWithValues: positions.map { ($0.asin, $0.positionMs) })
+            audibleOnDeck = books.compactMap { book in
+                guard let posMs = positionMap[book.asin], posMs > 0 else { return nil }
+                return (book: book, positionMs: posMs)
+            }.sorted { a, b in
+                (a.book.purchaseDate ?? .distantPast) > (b.book.purchaseDate ?? .distantPast)
+            }
+
+            audibleError = nil
+        } catch {
+            audibleError = "Failed to load on-deck: \(error.localizedDescription)"
+        }
+    }
+
+    func searchAudibleBooks(query: String) -> [AudibleBook] {
+        let lowered = query.lowercased()
+        return audibleBooks.filter {
+            $0.title.lowercased().contains(lowered) ||
+            $0.author.lowercased().contains(lowered)
+        }
+    }
+
+    // MARK: - Audible Playback
+
+    func playAudibleBook(book: AudibleBook, seekOffsetMs: Int = 0) async {
+        guard let params = sonosAudibleParams, let controller = activeController else {
+            audibleError = "Sonos Audible params not yet discovered. Play an Audible book from the Sonos app first."
+            return
+        }
+        do {
+            let uri = params.buildPlayURI(asin: book.asin)
+            let didl = params.buildPlayDIDL(asin: book.asin, title: book.title, coverURL: book.coverURL)
+
+            try await controller.playURI(uri, metadata: didl)
+
+            if seekOffsetMs > 0 {
+                try await waitForPlaying()
+                let totalSeconds = seekOffsetMs / 1000
+                let h = totalSeconds / 3600
+                let m = (totalSeconds % 3600) / 60
+                let s = totalSeconds % 60
+                let target = String(format: "%d:%02d:%02d", h, m, s)
+                try await controller.seek(to: target)
+
+                // Verify position was accepted
+                #if DEBUG
+                if let pos = try? await controller.getPositionInfo() {
+                    print("[Audible] Seek target: \(target), current: \(pos.elapsed)")
+                }
+                #endif
+            }
+
+            await refreshPlayback()
+        } catch {
+            audibleError = "Playback failed: \(error.localizedDescription)"
+        }
+    }
+
+    func playAudibleChapter(book: AudibleBook, chapter: AudibleChapter) async {
+        await playAudibleBook(book: book, seekOffsetMs: chapter.startOffsetMs)
     }
 }
