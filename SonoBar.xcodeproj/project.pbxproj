@@ -25,6 +25,8 @@
 		C5BA2C06F8F13D25501050EB /* SonoBarKit in Frameworks */ = {isa = PBXBuildFile; productRef = C47C1DE3A31D9B47495857F8 /* SonoBarKit */; };
 		PLEX01SETUP01VIEW0BUILDREF /* PlexSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX01SETUP01VIEW0FILEREF /* PlexSetupView.swift */; };
 		PLEX01KEYCH01HELP0BUILDREF /* PlexKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX01KEYCH01HELP0FILEREF /* PlexKeychain.swift */; };
+		AUD001KEYCH001HELP0BUILDR /* AudibleKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUD001KEYCH001HELP0FILERE /* AudibleKeychain.swift */; };
+		AUD002PARAM001DISC0BUILDR /* SonosAudibleParams.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUD002PARAM001DISC0FILERE /* SonosAudibleParams.swift */; };
 		PLEX02BROWS01VIEW0BUILDREF /* PlexBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX02BROWS01VIEW0FILEREF /* PlexBrowseView.swift */; };
 		PLEX03ALBUM01LIST0BUILDREF /* PlexAlbumListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX03ALBUM01LIST0FILEREF /* PlexAlbumListView.swift */; };
 		PLEX04TRACK01LIST0BUILDREF /* PlexTrackListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PLEX04TRACK01LIST0FILEREF /* PlexTrackListView.swift */; };
@@ -55,6 +57,8 @@
 		PLEX03ALBUM01LIST0FILEREF /* PlexAlbumListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexAlbumListView.swift; sourceTree = "<group>"; };
 		PLEX04TRACK01LIST0FILEREF /* PlexTrackListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexTrackListView.swift; sourceTree = "<group>"; };
 		PLEX01KEYCH01HELP0FILEREF /* PlexKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexKeychain.swift; sourceTree = "<group>"; };
+		AUD001KEYCH001HELP0FILERE /* AudibleKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudibleKeychain.swift; sourceTree = "<group>"; };
+		AUD002PARAM001DISC0FILERE /* SonosAudibleParams.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosAudibleParams.swift; sourceTree = "<group>"; };
 		FBBDA7A4ABF3A635C1A6C887 /* VolumeSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeSliderView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -151,7 +155,9 @@
 			isa = PBXGroup;
 			children = (
 				800269C4C7C75C4A798728CF /* AppState.swift */,
+				AUD001KEYCH001HELP0FILERE /* AudibleKeychain.swift */,
 				PLEX01KEYCH01HELP0FILEREF /* PlexKeychain.swift */,
+				AUD002PARAM001DISC0FILERE /* SonosAudibleParams.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -220,6 +226,7 @@
 				0080213543DD386C6C589E5B /* AlarmsView.swift in Sources */,
 				0536F53032789CC218E34D83 /* AppDelegate.swift in Sources */,
 				4689D6ADC8B48002E108A687 /* AppState.swift in Sources */,
+				AUD001KEYCH001HELP0BUILDR /* AudibleKeychain.swift in Sources */,
 				8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */,
 				827BD66207075FB6075E8145 /* BrowseView.swift in Sources */,
 				5C29513A59EF5A02C0229FCD /* ContentGridView.swift in Sources */,
@@ -236,6 +243,7 @@
 				0F33F3ED2BD864B9851AFB8D /* RoomSwitcherView.swift in Sources */,
 				14BF7B0AB69F913251D3FB97 /* SettingsStore.swift in Sources */,
 				FD51B87724CFCFDC95F6B0A9 /* SonoBarApp.swift in Sources */,
+				AUD002PARAM001DISC0BUILDR /* SonosAudibleParams.swift in Sources */,
 				05EFD6FB44C4A9E5947EF6B9 /* VolumeSliderView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
