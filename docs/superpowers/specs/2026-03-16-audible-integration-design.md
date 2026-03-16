@@ -17,7 +17,7 @@ Three components:
 
 ### AudibleClient (SonoBarKit)
 
-HTTP client for the Audible REST API. Handles library browsing, chapter info, resume positions, and cover art URLs. Uses OAuth PKCE tokens stored in Keychain.
+HTTP client for the Audible REST API. Handles library browsing, chapter info, resume positions, and cover art URLs. Requests are signed using RSA + `adp_token` (Audible's device authentication scheme).
 
 Base URL: `https://api.audible.co.uk` (marketplace-specific)
 
@@ -27,7 +27,7 @@ Discovers Audible-specific Sonos service parameters by scanning speaker URIs. St
 
 Discovery sources (in priority order):
 1. Room scan — extract from any `x-rincon-cpcontainer:...?sid=239` URI and its DIDL `desc` element
-2. MusicServices SOAP query — lists all linked services with account info (fallback)
+2. MusicServices SOAP query — `GetSessionId` action with service ID 239 returns the account serial number. The `desc` token follows the pattern `SA_RINCON{serviceAccountId}_X_#Svc{serviceAccountId}-0-Token` where `serviceAccountId` is returned by the MusicServices service.
 
 ### Audible Browse UI (SonoBar)
 
@@ -40,7 +40,7 @@ AudibleClient
 ├── getLibrary() -> [AudibleBook]
 ├── getBook(asin:) -> AudibleBook
 ├── getChapters(asin:) -> [AudibleChapter]
-├── getListeningPositions(asins:) -> [String: Int]
+├── getListeningPositions(asins:) -> [AudibleListeningPosition]
 ├── coverURL(imagePath:) -> URL
 └── refreshTokensIfNeeded()
 ```
@@ -54,9 +54,16 @@ AudibleClient
 | `getChapters` | `GET /1.0/library/{asin}?response_groups=chapter_info` |
 | `getListeningPositions` | `GET /1.0/annotations/lastpositions?asins={asin1,asin2,...}` |
 | `coverURL` | Direct Amazon CDN URL from library response `product_images` field |
-| `refreshTokensIfNeeded` | `POST /auth/token` with refresh token |
+| `refreshTokensIfNeeded` | `POST https://api.amazon.co.uk/auth/o2/token` with refresh token |
 
-All requests include `Authorization: Bearer {access_token}` header.
+### Request Signing
+
+All API requests are signed using the device's RSA private key and `adp_token` (not bearer tokens — bearer auth is unreliable on UK marketplace). Each request includes:
+- `x-adp-token: {adp_token}`
+- `x-adp-alg: SHA256withRSA:1.0`
+- `x-adp-signature: {signature}`
+
+The signature is computed as `SHA256withRSA(method + "\n" + path + "\n" + timestamp + "\n" + body + "\n" + adp_token)` using the stored RSA private key.
 
 ### Models
 
@@ -73,10 +80,11 @@ struct AudibleBook: Identifiable, Sendable, Codable {
 }
 
 struct AudibleChapter: Identifiable, Sendable, Codable {
+    let index: Int                // chapter number (0-based)
     let title: String
     let startOffsetMs: Int
     let durationMs: Int
-    var id: String { "\(startOffsetMs)" }
+    var id: Int { index }
 }
 
 struct AudibleListeningPosition: Sendable {
@@ -87,35 +95,60 @@ struct AudibleListeningPosition: Sendable {
 
 ## Authentication
 
-Amazon OAuth with PKCE, using a local HTTP server to capture the redirect.
+Amazon OAuth with PKCE, followed by device registration. Amazon does not redirect to localhost — the auth uses a WKWebView to capture the redirect URL.
 
 ### Flow
 
 1. Generate `code_verifier` (random 32 bytes, base64url-encoded) and `code_challenge` (SHA256 of verifier, base64url-encoded)
-2. Start `NWListener` on a random localhost port for the callback
-3. Open browser to Amazon authorization URL:
+2. Generate a `device_serial` (random hex string, stored for reuse)
+3. Construct `client_id` as `"device:{device_serial}#A2CZJZGLK2JJVM"`
+4. Open a `WKWebView` (in-app, not external browser) to:
    ```
    https://www.amazon.co.uk/ap/signin?
-     client_id={audible_client_id}
+     client_id={client_id}
      &response_type=code
      &code_challenge={challenge}
      &code_challenge_method=S256
-     &redirect_uri=http://localhost:{port}/callback
    ```
-4. User logs in with Amazon credentials (browser handles 2FA/CAPTCHA naturally)
-5. Amazon redirects to `http://localhost:{port}/callback?code={auth_code}`
-6. Local server captures the code, stops listening
-7. Exchange code for tokens:
+5. User logs in (WKWebView handles 2FA/CAPTCHA natively)
+6. Amazon redirects to `https://www.amazon.co.uk/ap/maplanding?...code={auth_code}`
+7. WKWebView's navigation delegate intercepts the redirect URL and extracts the code
+8. **Device Registration** — exchange code for device credentials:
    ```
-   POST https://api.amazon.co.uk/auth/o2/token
-     grant_type=authorization_code
-     &code={auth_code}
-     &code_verifier={verifier}
-     &redirect_uri=http://localhost:{port}/callback
-     &client_id={audible_client_id}
+   POST https://api.amazon.co.uk/auth/register
+   {
+     "auth_data": {
+       "authorization_code": "{auth_code}",
+       "code_verifier": "{verifier}",
+       "code_algorithm": "SHA-256",
+       "client_domain": "DeviceLegacy",
+       "client_id": "{client_id}"
+     },
+     "registration_data": {
+       "domain": "Device",
+       "app_version": "3.56.2",
+       "device_type": "A2CZJZGLK2JJVM",
+       "device_serial": "{device_serial}",
+       "app_name": "Audible",
+       "os_version": "17.0",
+       "software_version": "35602678"
+     },
+     "requested_token_type": [
+       "bearer",
+       "mac_dms",
+       "store_authentication_cookie",
+       "website_cookies"
+     ],
+     "cookies": { "domain": ".amazon.co.uk", "website_cookies": [] },
+     "requested_extensions": ["device_info", "customer_info"]
+   }
    ```
-8. Receive `access_token` (short-lived) and `refresh_token` (long-lived)
-9. Store both in Keychain
+9. Response includes:
+   - `access_token` (short-lived ~1 hour)
+   - `refresh_token` (long-lived)
+   - `mac_dms.adp_token` (for request signing)
+   - `mac_dms.device_private_key` (RSA private key PEM)
+10. Store all four in Keychain
 
 ### Token Refresh
 
@@ -124,17 +157,16 @@ Access tokens expire after ~1 hour. Before each API call, check expiry. If expir
 POST https://api.amazon.co.uk/auth/o2/token
   grant_type=refresh_token
   &refresh_token={refresh_token}
-  &client_id={audible_client_id}
+  &client_id={client_id}
 ```
 
-### Client ID and Device Registration
+The `adp_token` and RSA key do not expire and do not need refreshing.
 
-The Audible API requires a registered device. The mkb79/Audible library documents the client IDs and registration flow. Key values for UK marketplace:
-- OAuth client ID: from Audible app reverse engineering (documented in mkb79/Audible)
-- Device type: `A2CZJZGLK2JJVM` (Audible iOS app device type)
+### Constants (UK Marketplace)
+
+- Device type: `A2CZJZGLK2JJVM`
 - Domain: `amazon.co.uk`
-
-These are constants baked into the app.
+- API base: `https://api.audible.co.uk`
 
 ## Sonos Service Parameters
 
@@ -145,7 +177,7 @@ On each `refreshAllRooms`, scan `roomStates` for Audible URIs:
 ```swift
 // When mediaURI contains "sid=239"
 // Extract: sn from query string, marketplace from URI suffix (_co.uk)
-// Extract: desc from DIDL metadata
+// Extract: desc from DIDL metadata (stored in mediaDIDL on RoomSummary)
 ```
 
 Store in UserDefaults:
@@ -156,7 +188,11 @@ Store in UserDefaults:
 
 ### Fallback: MusicServices Query
 
-If no speaker has Audible content loaded, query the Sonos `MusicServices` SOAP service to get the account serial number for Audible.
+If no speaker has Audible content loaded, query the Sonos `MusicServices` SOAP service. Call `GetSessionId` with `ServiceId=239` to get the account-specific session info. The `desc` token can be constructed from the service account ID returned.
+
+### Stale Params
+
+If playback fails with a SOAP error after using stored params, clear UserDefaults and re-discover on next room scan. Show "Play any Audible book from the Sonos app once, then try again" if discovery fails.
 
 ### URI Construction
 
@@ -203,7 +239,7 @@ Browse tab: **Recents | Plex | Audible**
 │ │     │ 65% · 10m left       │
 │ └─────┘                      │
 ├──────────────────────────────┤
-│ Library (sorted by recent)   │
+│ Library (sorted by purchase) │
 │ ┌───┐ ┌───┐ ┌───┐           │
 │ │   │ │   │ │   │           │
 │ └───┘ └───┘ └───┘           │
@@ -214,7 +250,7 @@ Browse tab: **Recents | Plex | Audible**
 ### Continue Listening
 
 - Fetch library, then batch-fetch listening positions via `getListeningPositions`
-- Show books with position > 0, sorted by most recently listened
+- Show books with position > 0, sorted by purchase date (the API does not return a "last listened" timestamp)
 - Each row: cover art, title, author, progress %, time remaining
 - Tap to resume on active Sonos speaker
 
@@ -250,14 +286,14 @@ Tap a book → chapter list view:
 ```
 
 - Resume button: plays from saved position (seek to offset)
-- Play All: starts from chapter 1
+- Play All: starts from beginning
 - Tap chapter: plays from that chapter's start offset
 - Progress bar on the currently-in-progress chapter
 
 ### Error States
 
 - **Not connected**: Show setup view (Sign in with Amazon)
-- **Sonos params not found**: "Audible not linked to Sonos — open the Sonos app and add Audible as a service"
+- **Sonos params not found**: "Play any Audible book from the Sonos app once, then try again here"
 - **Token expired**: Auto-refresh; if refresh fails, prompt re-login
 - **Library empty**: "No audiobooks found"
 - **Server error**: "Can't reach Audible — check your internet connection"
@@ -275,11 +311,14 @@ Sonos handles enqueuing chapters and DRM internally. The `x-rincon-cpcontainer:`
 ### Resume / Chapter Jump
 
 1. Start playback as above
-2. Wait for `PLAYING` state (same `waitForPlaying` pattern as Plex)
+2. Wait for `PLAYING` state (same `waitForPlaying` pattern as Plex — poll every 250ms, max 5 seconds)
 3. Seek to the target offset via `AVTransport.Seek` with `REL_TIME`
+4. **Verify seek**: poll `GetPositionInfo` after seek to confirm position changed. If not, retry once. If still wrong, log a warning but don't block playback.
 
 For resume: offset from `getListeningPositions` API.
 For chapter jump: offset from `getChapters` API (`startOffsetMs`).
+
+**Risk**: Chapter seeking on Audible via Sonos is known to be unreliable in the Sonos community. The seek may silently fail or land in the wrong position. The verify-and-retry approach mitigates this. If seek is consistently unreliable, a future improvement could use repeated `Next` track calls to step through chapters instead.
 
 ### Progress Reporting
 
@@ -290,37 +329,39 @@ Not needed via Audible API — Sonos reports progress to Audible directly throug
 | Layer | File | Purpose |
 |-------|------|---------|
 | SonoBarKit | `Models/AudibleModels.swift` | AudibleBook, AudibleChapter structs |
-| SonoBarKit | `Services/AudibleClient.swift` | HTTP client for Audible API |
-| SonoBarKit | `Services/AudibleAuth.swift` | OAuth PKCE flow with local callback server |
+| SonoBarKit | `Services/AudibleClient.swift` | HTTP client for Audible API with request signing |
+| SonoBarKit | `Services/AudibleAuth.swift` | OAuth PKCE + device registration + RSA signing |
 | SonoBarKit | `Tests/.../AudibleModelsTests.swift` | JSON parsing tests |
 | SonoBarKit | `Tests/.../AudibleClientTests.swift` | API endpoint tests |
-| SonoBar | `Services/AudibleKeychain.swift` | Keychain for auth tokens |
+| SonoBar | `Services/AudibleKeychain.swift` | Keychain for access token, refresh token, adp_token, RSA key |
 | SonoBar | `Services/SonosAudibleParams.swift` | Discover/store Sonos service params |
 | SonoBar | `Views/AudibleBrowseView.swift` | Main Audible tab with continue listening + library |
 | SonoBar | `Views/AudibleChapterView.swift` | Chapter list for a book |
-| SonoBar | `Views/AudibleSetupView.swift` | Sign in with Amazon flow |
+| SonoBar | `Views/AudibleSetupView.swift` | WKWebView-based Amazon sign-in |
 
 ### Modified Files
 
 - `AppState.swift` — AudibleClient lifecycle, playback methods, service param discovery
 - `BrowseView.swift` — add Audible segment to picker
-- `NowPlayingView.swift` — update `sourceBadge` for Audible URI detection
+- `NowPlayingView.swift` — update `sourceBadge` to check media URI for `sid=239` (not track URI for "audible")
 
 ## Testing
 
 ### SonoBarKit Tests
 
 - **AudibleModelsTests** — parse sample Audible API JSON responses
-- **AudibleClientTests** — verify URL construction, token headers, endpoint paths
+- **AudibleClientTests** — verify URL construction, request signing, endpoint paths
+- **AudibleAuthTests** — verify PKCE challenge generation, device registration request format
 
 ### Manual Testing
 
-- Sign in with Amazon via browser
+- Sign in with Amazon via WKWebView
 - Browse library with cover art
 - View chapters for a book
 - Play a book on Sonos speaker
 - Resume from saved position
 - Jump to specific chapter
+- Verify seek position after chapter jump
 - Verify Sonos handles chapter navigation (next/previous)
 - Token refresh after expiry
 - Service param discovery from speakers
@@ -332,3 +373,4 @@ Not needed via Audible API — Sonos reports progress to Audible directly throug
 - Wishlist/store browsing
 - Multiple marketplace support (hardcoded to `co.uk`)
 - Audible podcasts
+- Bearer-token auth (unreliable on UK marketplace — using signed requests)
