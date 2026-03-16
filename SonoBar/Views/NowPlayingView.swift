@@ -70,6 +70,7 @@ struct NowPlayingView: View {
 
     private var sourceBadge: String {
         guard let uri = appState.playbackState.currentTrack?.uri else { return "" }
+        if uri.contains("sid=239") { return "Audible" }
         if let plexHost = appState.plexClient?.host, uri.contains(plexHost) { return "Plex" }
         if uri.contains("spotify") { return "Spotify" }
         if uri.contains("apple") { return "Apple Music" }

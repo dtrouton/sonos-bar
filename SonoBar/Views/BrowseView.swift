@@ -5,6 +5,7 @@ import SonoBarKit
 enum BrowseSegment: String, CaseIterable {
     case recents = "Recents"
     case plex = "Plex"
+    case audible = "Audible"
 }
 
 struct BrowseView: View {
@@ -38,6 +39,8 @@ struct BrowseView: View {
                 recentsContent
             case .plex:
                 PlexBrowseView()
+            case .audible:
+                AudibleBrowseView()
             }
         }
     }
