@@ -224,6 +224,9 @@ struct AmazonWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        // Use a non-persistent data store so Amazon can't reuse cached sessions
+        // — forces full login flow with OAuth extension processing
+        config.websiteDataStore = .nonPersistent()
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.load(URLRequest(url: url))
