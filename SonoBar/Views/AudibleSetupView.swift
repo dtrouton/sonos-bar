@@ -248,11 +248,28 @@ struct AmazonWebView: NSViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            guard let url = navigationAction.request.url,
-                  url.absoluteString.contains("maplanding") else {
+            guard let url = navigationAction.request.url else {
                 decisionHandler(.allow)
                 return
             }
+
+            #if DEBUG
+            print("[AudibleAuth] Navigation to: \(url.absoluteString.prefix(200))")
+            #endif
+
+            guard url.absoluteString.contains("maplanding") else {
+                decisionHandler(.allow)
+                return
+            }
+
+            #if DEBUG
+            print("[AudibleAuth] Maplanding detected! Full URL: \(url.absoluteString)")
+            if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                for item in components.queryItems ?? [] {
+                    print("[AudibleAuth]   \(item.name) = \(item.value ?? "nil")")
+                }
+            }
+            #endif
 
             // Extract authorization code from query params
             if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -262,6 +279,10 @@ struct AmazonWebView: NSViewRepresentable {
                 decisionHandler(.cancel)
                 onAuthCode(authCode)
             } else {
+                // Maplanding without auth code — likely an error from Amazon
+                #if DEBUG
+                print("[AudibleAuth] Maplanding but no authorization_code found")
+                #endif
                 decisionHandler(.allow)
             }
         }
