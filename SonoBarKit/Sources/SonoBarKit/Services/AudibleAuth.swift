@@ -35,19 +35,24 @@ public enum AudibleAuth {
     public static func buildAuthURL(clientId: String, codeChallenge: String) -> URL {
         var components = URLComponents(string: "https://www.amazon.co.uk/ap/signin")!
         components.queryItems = [
+            // OpenID 2.0 base
+            URLQueryItem(name: "openid.ns", value: "http://specs.openid.net/auth/2.0"),
+            URLQueryItem(name: "openid.mode", value: "checkid_setup"),
+            URLQueryItem(name: "openid.claimed_id", value: "http://specs.openid.net/auth/2.0/identifier_select"),
+            URLQueryItem(name: "openid.identity", value: "http://specs.openid.net/auth/2.0/identifier_select"),
+            URLQueryItem(name: "openid.return_to", value: "https://www.amazon.co.uk/ap/maplanding"),
+            URLQueryItem(name: "openid.assoc_handle", value: openidAssocHandle),
+            // OAuth 2.0 extension — MUST declare namespace for Amazon to include auth code
+            URLQueryItem(name: "openid.ns.oa2", value: "http://www.amazon.com/ap/ext/oauth/2"),
             URLQueryItem(name: "openid.oa2.response_type", value: "code"),
             URLQueryItem(name: "openid.oa2.code_challenge_method", value: "S256"),
             URLQueryItem(name: "openid.oa2.code_challenge", value: codeChallenge),
             URLQueryItem(name: "openid.oa2.client_id", value: clientId),
             URLQueryItem(name: "openid.oa2.scope", value: "device_auth_access"),
-            URLQueryItem(name: "openid.return_to", value: "https://www.amazon.co.uk/ap/maplanding"),
-            URLQueryItem(name: "openid.assoc_handle", value: openidAssocHandle),
+            // Amazon/Audible specific
             URLQueryItem(name: "marketPlaceId", value: marketplaceId),
             URLQueryItem(name: "pageId", value: "amzn_audible_ios"),
-            URLQueryItem(name: "openid.mode", value: "checkid_setup"),
-            URLQueryItem(name: "openid.ns", value: "http://specs.openid.net/auth/2.0"),
-            URLQueryItem(name: "openid.claimed_id", value: "http://specs.openid.net/auth/2.0/identifier_select"),
-            URLQueryItem(name: "openid.identity", value: "http://specs.openid.net/auth/2.0/identifier_select"),
+            URLQueryItem(name: "accountStatusPolicy", value: "P1"),
         ]
         return components.url!
     }
