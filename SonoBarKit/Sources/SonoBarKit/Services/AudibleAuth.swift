@@ -13,6 +13,20 @@ public enum AudibleAuth {
     public static let openidAssocHandle = "amzn_audible_ios_uk"
     public static let deviceType = "A2CZJZGLK2JJVM"
 
+    // MARK: - Device Identity
+
+    /// Generates an uppercase UUID hex string as the device serial.
+    public static func generateDeviceSerial() -> String {
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").uppercased()
+    }
+
+    /// Builds the client_id by hex-encoding "{serial}#A2CZJZGLK2JJVM" bytes.
+    /// This matches the Audible iOS app's client_id format.
+    public static func buildClientId(serial: String) -> String {
+        let raw = "\(serial)#\(deviceType)"
+        return raw.utf8.map { String(format: "%02x", $0) }.joined()
+    }
+
     // MARK: - PKCE
 
     /// Generates a 32-byte random code verifier (base64url, no padding).
@@ -31,28 +45,28 @@ public enum AudibleAuth {
     // MARK: - OAuth URL
 
     /// Builds the Amazon OAuth sign-in URL with all required OpenID params.
-    /// clientId format: "device:{deviceSerial}#A2CZJZGLK2JJVM"
     public static func buildAuthURL(clientId: String, codeChallenge: String) -> URL {
         var components = URLComponents(string: "https://www.amazon.co.uk/ap/signin")!
+        // Match the exact parameter set from the Audible iOS app (via mkb79/Audible)
         components.queryItems = [
-            // OpenID 2.0 base
-            URLQueryItem(name: "openid.ns", value: "http://specs.openid.net/auth/2.0"),
-            URLQueryItem(name: "openid.mode", value: "checkid_setup"),
-            URLQueryItem(name: "openid.claimed_id", value: "http://specs.openid.net/auth/2.0/identifier_select"),
-            URLQueryItem(name: "openid.identity", value: "http://specs.openid.net/auth/2.0/identifier_select"),
-            URLQueryItem(name: "openid.return_to", value: "https://www.amazon.co.uk/ap/maplanding"),
-            URLQueryItem(name: "openid.assoc_handle", value: openidAssocHandle),
-            // OAuth 2.0 extension — MUST declare namespace for Amazon to include auth code
-            URLQueryItem(name: "openid.ns.oa2", value: "http://www.amazon.com/ap/ext/oauth/2"),
             URLQueryItem(name: "openid.oa2.response_type", value: "code"),
             URLQueryItem(name: "openid.oa2.code_challenge_method", value: "S256"),
             URLQueryItem(name: "openid.oa2.code_challenge", value: codeChallenge),
-            URLQueryItem(name: "openid.oa2.client_id", value: clientId),
-            URLQueryItem(name: "openid.oa2.scope", value: "device_auth_access"),
-            // Amazon/Audible specific
-            URLQueryItem(name: "marketPlaceId", value: marketplaceId),
+            URLQueryItem(name: "openid.return_to", value: "https://www.amazon.co.uk/ap/maplanding"),
+            URLQueryItem(name: "openid.assoc_handle", value: openidAssocHandle),
+            URLQueryItem(name: "openid.identity", value: "http://specs.openid.net/auth/2.0/identifier_select"),
             URLQueryItem(name: "pageId", value: "amzn_audible_ios"),
             URLQueryItem(name: "accountStatusPolicy", value: "P1"),
+            URLQueryItem(name: "openid.claimed_id", value: "http://specs.openid.net/auth/2.0/identifier_select"),
+            URLQueryItem(name: "openid.mode", value: "checkid_setup"),
+            URLQueryItem(name: "openid.ns.oa2", value: "http://www.amazon.com/ap/ext/oauth/2"),
+            URLQueryItem(name: "openid.oa2.client_id", value: "device:\(clientId)"),
+            URLQueryItem(name: "openid.ns.pape", value: "http://specs.openid.net/extensions/pape/1.0"),
+            URLQueryItem(name: "marketPlaceId", value: marketplaceId),
+            URLQueryItem(name: "openid.oa2.scope", value: "device_auth_access"),
+            URLQueryItem(name: "forceMobileLayout", value: "true"),
+            URLQueryItem(name: "openid.ns", value: "http://specs.openid.net/auth/2.0"),
+            URLQueryItem(name: "openid.pape.max_auth_age", value: "0"),
         ]
         return components.url!
     }
@@ -77,7 +91,7 @@ public enum AudibleAuth {
                 "code_verifier": codeVerifier,
                 "code_algorithm": "SHA-256",
                 "client_domain": "DeviceLegacy",
-                "client_id": clientId,
+                "client_id": "device:\(clientId)",
             ],
             "registration_data": [
                 "domain": "Device",
@@ -98,15 +112,6 @@ public enum AudibleAuth {
 
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         return request
-    }
-
-    // MARK: - Device Serial
-
-    /// Generates a random hex device serial (32 chars).
-    public static func generateDeviceSerial() -> String {
-        var bytes = [UInt8](repeating: 0, count: 16)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: - Request Signing
@@ -171,7 +176,7 @@ public enum AudibleAuth {
         components.queryItems = [
             URLQueryItem(name: "grant_type", value: "refresh_token"),
             URLQueryItem(name: "refresh_token", value: refreshToken),
-            URLQueryItem(name: "client_id", value: clientId),
+            URLQueryItem(name: "client_id", value: "device:\(clientId)"),
         ]
         // percentEncodedQuery gives us the properly encoded body
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)

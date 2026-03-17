@@ -144,8 +144,13 @@ struct AudibleSetupView: View {
     private func startSignIn() {
         errorMessage = nil
         deviceSerial = AudibleAuth.generateDeviceSerial()
-        clientId = "device:\(deviceSerial)#\(AudibleAuth.deviceType)"
+        clientId = AudibleAuth.buildClientId(serial: deviceSerial)
         codeVerifier = AudibleAuth.createCodeVerifier()
+        #if DEBUG
+        let challenge = AudibleAuth.createCodeChallenge(verifier: codeVerifier)
+        let url = AudibleAuth.buildAuthURL(clientId: clientId, codeChallenge: challenge)
+        print("[AudibleAuth] Auth URL: \(url.absoluteString)")
+        #endif
         showWebView = true
     }
 
