@@ -99,28 +99,37 @@ public enum AudibleAuth {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        // Note: client_id here is the raw hex string (no "device:" prefix).
+        // The "device:" prefix is only used in the OAuth URL, not in registration.
         let body: [String: Any] = [
+            "requested_token_type": [
+                "bearer",
+                "mac_dms",
+                "website_cookies",
+                "store_authentication_cookie",
+            ],
+            "cookies": [
+                "website_cookies": [] as [Any],
+                "domain": ".amazon.co.uk",
+            ] as [String: Any],
+            "registration_data": [
+                "domain": "Device",
+                "app_version": "3.56.2",
+                "device_serial": deviceSerial,
+                "device_type": deviceType,
+                "device_name": "%FIRST_NAME%%FIRST_NAME_POSSESSIVE_STRING%%DUPE_STRATEGY_1ST%Audible for iPhone",
+                "os_version": "15.0.0",
+                "software_version": "35602678",
+                "device_model": "iPhone",
+                "app_name": "Audible",
+            ],
             "auth_data": [
+                "client_id": clientId,
                 "authorization_code": authCode,
                 "code_verifier": codeVerifier,
                 "code_algorithm": "SHA-256",
                 "client_domain": "DeviceLegacy",
-                "client_id": "device:\(clientId)",
             ],
-            "registration_data": [
-                "domain": "Device",
-                "app_version": "3.56.2",
-                "device_type": deviceType,
-                "device_serial": deviceSerial,
-                "app_name": "Audible",
-                "os_version": "17.0",
-                "software_version": "35602678",
-            ],
-            "requested_token_type": ["bearer", "mac_dms", "store_authentication_cookie", "website_cookies"],
-            "cookies": [
-                "domain": ".amazon.co.uk",
-                "website_cookies": [] as [Any],
-            ] as [String: Any],
             "requested_extensions": ["device_info", "customer_info"],
         ]
 
@@ -177,22 +186,21 @@ public enum AudibleAuth {
     // MARK: - Token Refresh
 
     /// Builds a token refresh URLRequest.
-    public static func buildTokenRefreshRequest(
-        refreshToken: String,
-        clientId: String
-    ) -> URLRequest {
-        let url = URL(string: "https://api.amazon.co.uk/auth/o2/token")!
+    /// Uses the Audible-specific /auth/token endpoint (not OAuth /auth/o2/token).
+    public static func buildTokenRefreshRequest(refreshToken: String) -> URLRequest {
+        let url = URL(string: "https://api.amazon.co.uk/auth/token")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
         var components = URLComponents()
         components.queryItems = [
-            URLQueryItem(name: "grant_type", value: "refresh_token"),
-            URLQueryItem(name: "refresh_token", value: refreshToken),
-            URLQueryItem(name: "client_id", value: "device:\(clientId)"),
+            URLQueryItem(name: "app_name", value: "Audible"),
+            URLQueryItem(name: "app_version", value: "3.56.2"),
+            URLQueryItem(name: "source_token", value: refreshToken),
+            URLQueryItem(name: "requested_token_type", value: "access_token"),
+            URLQueryItem(name: "source_token_type", value: "refresh_token"),
         ]
-        // percentEncodedQuery gives us the properly encoded body
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         return request
     }

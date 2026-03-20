@@ -109,7 +109,7 @@ struct AudibleAuthTests {
         let authData = try #require(json["auth_data"] as? [String: Any])
         #expect(authData["authorization_code"] as? String == "AUTH_CODE_123")
         #expect(authData["code_verifier"] as? String == "VERIFIER_456")
-        #expect(authData["client_id"] as? String == "device:\(hexClientId)")
+        #expect(authData["client_id"] as? String == hexClientId)
 
         let regData = try #require(json["registration_data"] as? [String: Any])
         #expect(regData["device_serial"] as? String == "SERIAL789")
@@ -148,14 +148,12 @@ struct AudibleAuthTests {
     // MARK: - Token Refresh Test
 
     @Test func testTokenRefreshRequestFormat() throws {
-        let hexClientId = AudibleAuth.buildClientId(serial: "SERIAL")
         let request = AudibleAuth.buildTokenRefreshRequest(
-            refreshToken: "Atzr|REFRESH_TOKEN_123",
-            clientId: hexClientId
+            refreshToken: "Atzr|REFRESH_TOKEN_123"
         )
 
         #expect(request.httpMethod == "POST")
-        #expect(request.url?.absoluteString == "https://api.amazon.co.uk/auth/o2/token")
+        #expect(request.url?.absoluteString == "https://api.amazon.co.uk/auth/token")
 
         let body = try #require(request.httpBody)
         let bodyString = try #require(String(data: body, encoding: .utf8))
@@ -164,8 +162,9 @@ struct AudibleAuthTests {
             uniqueKeysWithValues: components.queryItems!.map { ($0.name, $0.value ?? "") }
         )
 
-        #expect(params["grant_type"] == "refresh_token")
-        #expect(params["refresh_token"] == "Atzr|REFRESH_TOKEN_123")
-        #expect(params["client_id"] == "device:\(hexClientId)")
+        #expect(params["app_name"] == "Audible")
+        #expect(params["source_token"] == "Atzr|REFRESH_TOKEN_123")
+        #expect(params["requested_token_type"] == "access_token")
+        #expect(params["source_token_type"] == "refresh_token")
     }
 }

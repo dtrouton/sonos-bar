@@ -218,6 +218,17 @@ struct AudibleSetupView: View {
             deviceSerial: deviceSerial
         )
 
+        #if DEBUG
+        print("[AudibleAuth] Registration URL: \(request.url?.absoluteString ?? "nil")")
+        print("[AudibleAuth] Auth code: \(authCode)")
+        print("[AudibleAuth] Code verifier length: \(codeVerifier.count)")
+        print("[AudibleAuth] Client ID: \(clientId)")
+        print("[AudibleAuth] Device serial: \(deviceSerial)")
+        if let body = request.httpBody, let bodyStr = String(data: body, encoding: .utf8) {
+            print("[AudibleAuth] Request body: \(bodyStr.prefix(800))")
+        }
+        #endif
+
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
