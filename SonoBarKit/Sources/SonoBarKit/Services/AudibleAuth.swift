@@ -45,30 +45,44 @@ public enum AudibleAuth {
     // MARK: - OAuth URL
 
     /// Builds the Amazon OAuth sign-in URL with all required OpenID params.
+    /// Uses manual percent-encoding to match Python's urlencode behavior —
+    /// URLComponents leaves `:` and `/` unencoded in query values, but
+    /// Amazon's OpenID parser requires them percent-encoded.
     public static func buildAuthURL(clientId: String, codeChallenge: String) -> URL {
-        var components = URLComponents(string: "https://www.amazon.co.uk/ap/signin")!
-        // Match the exact parameter set from the Audible iOS app (via mkb79/Audible)
-        components.queryItems = [
-            URLQueryItem(name: "openid.oa2.response_type", value: "code"),
-            URLQueryItem(name: "openid.oa2.code_challenge_method", value: "S256"),
-            URLQueryItem(name: "openid.oa2.code_challenge", value: codeChallenge),
-            URLQueryItem(name: "openid.return_to", value: "https://www.amazon.co.uk/ap/maplanding"),
-            URLQueryItem(name: "openid.assoc_handle", value: openidAssocHandle),
-            URLQueryItem(name: "openid.identity", value: "http://specs.openid.net/auth/2.0/identifier_select"),
-            URLQueryItem(name: "pageId", value: "amzn_audible_ios"),
-            URLQueryItem(name: "accountStatusPolicy", value: "P1"),
-            URLQueryItem(name: "openid.claimed_id", value: "http://specs.openid.net/auth/2.0/identifier_select"),
-            URLQueryItem(name: "openid.mode", value: "checkid_setup"),
-            URLQueryItem(name: "openid.ns.oa2", value: "http://www.amazon.com/ap/ext/oauth/2"),
-            URLQueryItem(name: "openid.oa2.client_id", value: "device:\(clientId)"),
-            URLQueryItem(name: "openid.ns.pape", value: "http://specs.openid.net/extensions/pape/1.0"),
-            URLQueryItem(name: "marketPlaceId", value: marketplaceId),
-            URLQueryItem(name: "openid.oa2.scope", value: "device_auth_access"),
-            URLQueryItem(name: "forceMobileLayout", value: "true"),
-            URLQueryItem(name: "openid.ns", value: "http://specs.openid.net/auth/2.0"),
-            URLQueryItem(name: "openid.pape.max_auth_age", value: "0"),
+        let params: [(String, String)] = [
+            ("openid.oa2.response_type", "code"),
+            ("openid.oa2.code_challenge_method", "S256"),
+            ("openid.oa2.code_challenge", codeChallenge),
+            ("openid.return_to", "https://www.amazon.co.uk/ap/maplanding"),
+            ("openid.assoc_handle", openidAssocHandle),
+            ("openid.identity", "http://specs.openid.net/auth/2.0/identifier_select"),
+            ("pageId", "amzn_audible_ios"),
+            ("accountStatusPolicy", "P1"),
+            ("openid.claimed_id", "http://specs.openid.net/auth/2.0/identifier_select"),
+            ("openid.mode", "checkid_setup"),
+            ("openid.ns.oa2", "http://www.amazon.com/ap/ext/oauth/2"),
+            ("openid.oa2.client_id", "device:\(clientId)"),
+            ("openid.ns.pape", "http://specs.openid.net/extensions/pape/1.0"),
+            ("marketPlaceId", marketplaceId),
+            ("openid.oa2.scope", "device_auth_access"),
+            ("forceMobileLayout", "true"),
+            ("openid.ns", "http://specs.openid.net/auth/2.0"),
+            ("openid.pape.max_auth_age", "0"),
         ]
-        return components.url!
+        let query = params.map { key, value in
+            let encodedKey = strictURLEncode(key)
+            let encodedValue = strictURLEncode(value)
+            return "\(encodedKey)=\(encodedValue)"
+        }.joined(separator: "&")
+        return URL(string: "https://www.amazon.co.uk/ap/signin?\(query)")!
+    }
+
+    /// Percent-encodes a string for use in URL query parameters,
+    /// matching Python's urllib.parse.quote behavior (encodes `:`, `/`, etc.)
+    private static func strictURLEncode(_ string: String) -> String {
+        // Only allow unreserved characters: A-Z a-z 0-9 - _ . ~
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~")
+        return string.addingPercentEncoding(withAllowedCharacters: allowed) ?? string
     }
 
     // MARK: - Device Registration
