@@ -1,13 +1,13 @@
 // SonoBar/Views/AudibleSetupView.swift
 import SwiftUI
-import WebKit
 import SonoBarKit
 
 struct AudibleSetupView: View {
     @Environment(AppState.self) private var appState
     @State private var errorMessage: String?
     @State private var isRegistering = false
-    @State private var showWebView = false
+    @State private var showPasteStep = false
+    @State private var pastedURL = ""
 
     // Auth flow state
     @State private var deviceSerial = ""
@@ -23,6 +23,8 @@ struct AudibleSetupView: View {
             VStack(alignment: .leading, spacing: 12) {
                 if isConnected {
                     connectedView
+                } else if showPasteStep {
+                    pasteURLView
                 } else {
                     setupView
                 }
@@ -43,12 +45,6 @@ struct AudibleSetupView: View {
                     .font(.system(size: 13, weight: .semibold))
             }
 
-            if let client = appState.audibleClient {
-                Text("Marketplace: \(client.marketplace)")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }
-
             if !appState.audibleBooks.isEmpty {
                 Text("\(appState.audibleBooks.count) books in library")
                     .font(.system(size: 12))
@@ -58,25 +54,26 @@ struct AudibleSetupView: View {
             Button("Disconnect") {
                 appState.disconnectAudible()
                 errorMessage = nil
+                showPasteStep = false
+                pastedURL = ""
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
         }
     }
 
-    // MARK: - Setup View
+    // MARK: - Setup View (Step 1: Open Browser)
 
     private var setupView: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Connect to Audible")
                 .font(.system(size: 13, weight: .semibold))
 
-            Text("Sign in with your Amazon account to access your Audible library.")
+            Text("Sign in with your Amazon account in your browser to access your Audible library.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            // Error display
             if let errorMessage {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -85,58 +82,86 @@ struct AudibleSetupView: View {
                     Text(errorMessage)
                         .font(.system(size: 11))
                         .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            // Sign in button
             Button {
                 startSignIn()
             } label: {
-                if isRegistering {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Registering device...")
-                    }
-                } else {
-                    Label("Sign in with Amazon", systemImage: "person.circle")
-                }
+                Label("Sign in with Amazon", systemImage: "safari")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled(isRegistering)
-            .sheet(isPresented: $showWebView) {
-                webViewSheet
-            }
         }
     }
 
-    // MARK: - WebView Sheet
+    // MARK: - Paste URL View (Step 2: Paste Redirect URL)
 
-    private var webViewSheet: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Sign in to Amazon")
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
+    private var pasteURLView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Complete Sign-in")
+                .font(.system(size: 13, weight: .semibold))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Label("A browser window has opened", systemImage: "1.circle.fill")
+                    .font(.system(size: 11))
+                Label("Sign in to your Amazon account", systemImage: "2.circle.fill")
+                    .font(.system(size: 11))
+                Label("After sign-in, copy the URL from the address bar", systemImage: "3.circle.fill")
+                    .font(.system(size: 11))
+                Label("Paste it below", systemImage: "4.circle.fill")
+                    .font(.system(size: 11))
+            }
+            .foregroundColor(.secondary)
+
+            Text("The page may show an error — that's expected. Just copy the full URL.")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextField("Paste URL here...", text: $pastedURL)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11))
+
+            if let errorMessage {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 11))
+                    Text(errorMessage)
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
                 Button("Cancel") {
-                    showWebView = false
+                    showPasteStep = false
+                    pastedURL = ""
+                    errorMessage = nil
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-            }
-            .padding(12)
 
-            let authURL = AudibleAuth.buildAuthURL(
-                clientId: clientId,
-                codeChallenge: AudibleAuth.createCodeChallenge(verifier: codeVerifier)
-            )
-            AmazonWebView(url: authURL) { authCode in
-                showWebView = false
-                Task { await completeRegistration(authCode: authCode) }
+                Button {
+                    Task { await handlePastedURL() }
+                } label: {
+                    if isRegistering {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Connecting...")
+                        }
+                    } else {
+                        Text("Connect")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(pastedURL.isEmpty || isRegistering)
             }
         }
-        .frame(width: 440, height: 600)
     }
 
     // MARK: - Auth Flow
@@ -146,12 +171,40 @@ struct AudibleSetupView: View {
         deviceSerial = AudibleAuth.generateDeviceSerial()
         clientId = AudibleAuth.buildClientId(serial: deviceSerial)
         codeVerifier = AudibleAuth.createCodeVerifier()
-        #if DEBUG
+
         let challenge = AudibleAuth.createCodeChallenge(verifier: codeVerifier)
-        let url = AudibleAuth.buildAuthURL(clientId: clientId, codeChallenge: challenge)
-        print("[AudibleAuth] Auth URL: \(url.absoluteString)")
+        let authURL = AudibleAuth.buildAuthURL(clientId: clientId, codeChallenge: challenge)
+
+        #if DEBUG
+        print("[AudibleAuth] Auth URL: \(authURL.absoluteString)")
         #endif
-        showWebView = true
+
+        // Open in the user's default browser
+        NSWorkspace.shared.open(authURL)
+        showPasteStep = true
+    }
+
+    private func handlePastedURL() async {
+        errorMessage = nil
+
+        // Extract auth code from the pasted URL
+        guard let url = URL(string: pastedURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems else {
+            errorMessage = "Invalid URL. Please copy the full URL from your browser's address bar."
+            return
+        }
+
+        guard let authCode = queryItems.first(where: { $0.name == "openid.oa2.authorization_code" })?.value,
+              !authCode.isEmpty else {
+            #if DEBUG
+            print("[AudibleAuth] URL params: \(queryItems.map { "\($0.name)=\($0.value ?? "nil")" }.joined(separator: ", "))")
+            #endif
+            errorMessage = "No authorization code found in URL. Make sure you completed the Amazon sign-in and copied the URL from the final page."
+            return
+        }
+
+        await completeRegistration(authCode: authCode)
     }
 
     private func completeRegistration(authCode: String) async {
@@ -167,10 +220,20 @@ struct AudibleSetupView: View {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200..<300).contains(httpResponse.statusCode) else {
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-                errorMessage = "Registration failed (HTTP \(statusCode))"
+            guard let httpResponse = response as? HTTPURLResponse else {
+                errorMessage = "Registration failed: unexpected response"
+                return
+            }
+
+            #if DEBUG
+            print("[AudibleAuth] Registration HTTP \(httpResponse.statusCode)")
+            if let body = String(data: data, encoding: .utf8) {
+                print("[AudibleAuth] Response: \(body.prefix(500))")
+            }
+            #endif
+
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                errorMessage = "Registration failed (HTTP \(httpResponse.statusCode))"
                 return
             }
 
@@ -193,18 +256,10 @@ struct AudibleSetupView: View {
             guard let macDms = tokens["mac_dms"] as? [String: Any],
                   let adpToken = macDms["adp_token"] as? String,
                   let devicePrivateKey = macDms["device_private_key"] as? String else {
-                errorMessage = "Registration failed: missing MAC DMS tokens"
+                errorMessage = "Registration failed: missing device credentials"
                 return
             }
 
-            // Store everything and connect
-            AudibleKeychain.setAccessToken(accessToken)
-            AudibleKeychain.setRefreshToken(refreshToken)
-            AudibleKeychain.setAdpToken(adpToken)
-            AudibleKeychain.setPrivateKeyPEM(devicePrivateKey)
-            AudibleKeychain.setDeviceSerial(deviceSerial)
-
-            // Derive marketplace from the auth domain (e.g. "co.uk" from "amazon.co.uk")
             let marketplace = String(AudibleAuth.domain.dropFirst("amazon.".count))
 
             appState.connectAudible(
@@ -215,84 +270,11 @@ struct AudibleSetupView: View {
                 refreshToken: refreshToken,
                 deviceSerial: deviceSerial
             )
+
+            showPasteStep = false
+            pastedURL = ""
         } catch {
             errorMessage = "Registration failed: \(error.localizedDescription)"
-        }
-    }
-}
-
-// MARK: - AmazonWebView (WKWebView Wrapper)
-
-struct AmazonWebView: NSViewRepresentable {
-    let url: URL
-    var onAuthCode: (String) -> Void
-
-    func makeNSView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        // Use a non-persistent data store so Amazon can't reuse cached sessions
-        // — forces full login flow with OAuth extension processing
-        config.websiteDataStore = .nonPersistent()
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.navigationDelegate = context.coordinator
-        webView.load(URLRequest(url: url))
-        return webView
-    }
-
-    func updateNSView(_ nsView: WKWebView, context: Context) { }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onAuthCode: onAuthCode)
-    }
-
-    class Coordinator: NSObject, WKNavigationDelegate {
-        let onAuthCode: (String) -> Void
-
-        init(onAuthCode: @escaping (String) -> Void) {
-            self.onAuthCode = onAuthCode
-        }
-
-        func webView(
-            _ webView: WKWebView,
-            decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
-        ) {
-            guard let url = navigationAction.request.url else {
-                decisionHandler(.allow)
-                return
-            }
-
-            #if DEBUG
-            print("[AudibleAuth] Navigation to: \(url.absoluteString.prefix(200))")
-            #endif
-
-            guard url.absoluteString.contains("maplanding") else {
-                decisionHandler(.allow)
-                return
-            }
-
-            #if DEBUG
-            print("[AudibleAuth] Maplanding detected! Full URL: \(url.absoluteString)")
-            if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-                for item in components.queryItems ?? [] {
-                    print("[AudibleAuth]   \(item.name) = \(item.value ?? "nil")")
-                }
-            }
-            #endif
-
-            // Extract authorization code from query params
-            if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-               let queryItems = components.queryItems,
-               let authCode = queryItems.first(where: { $0.name == "openid.oa2.authorization_code" })?.value,
-               !authCode.isEmpty {
-                decisionHandler(.cancel)
-                onAuthCode(authCode)
-            } else {
-                // Maplanding without auth code — likely an error from Amazon
-                #if DEBUG
-                print("[AudibleAuth] Maplanding but no authorization_code found")
-                #endif
-                decisionHandler(.allow)
-            }
         }
     }
 }
