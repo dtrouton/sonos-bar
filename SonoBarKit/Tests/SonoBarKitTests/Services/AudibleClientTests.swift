@@ -55,12 +55,25 @@ struct AudibleClientTests {
 
     // MARK: - Helpers
 
+    /// A valid RSA private key in PEM format for signing tests.
+    private static let testPEM: String = {
+        let attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits as String: 2048,
+        ]
+        var error: Unmanaged<CFError>?
+        let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error)!
+        let data = SecKeyCopyExternalRepresentation(key, &error)! as Data
+        let b64 = data.base64EncodedString(options: [.lineLength64Characters, .endLineWithLineFeed])
+        return "-----BEGIN RSA PRIVATE KEY-----\n\(b64)\n-----END RSA PRIVATE KEY-----"
+    }()
+
     /// Creates an AudibleClient with the given mock HTTP client.
     private func makeClient(httpClient: CapturingHTTPClient) -> AudibleClient {
         AudibleClient(
             marketplace: "co.uk",
             adpToken: "test-adp-token",
-            privateKeyPEM: "test-key-pem",
+            privateKeyPEM: Self.testPEM,
             accessToken: "test-access-token",
             httpClient: httpClient
         )

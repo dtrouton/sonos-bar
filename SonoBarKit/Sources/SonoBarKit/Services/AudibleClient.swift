@@ -101,8 +101,7 @@ public final class AudibleClient: Sendable {
         applyHeaders(&request)
         request.timeoutInterval = 10
 
-        // Sign the request (may fail if key is invalid, but we still send)
-        try? AudibleAuth.signRequest(&request, adpToken: adpToken, privateKeyPEM: privateKeyPEM)
+        try AudibleAuth.signRequest(&request, adpToken: adpToken, privateKeyPEM: privateKeyPEM)
 
         let (data, httpResponse) = try await sendRequest(request)
         try checkStatus(httpResponse)

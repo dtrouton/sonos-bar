@@ -155,9 +155,10 @@ public enum AudibleAuth {
         // 1. Parse PEM to SecKey
         let privateKey = try secKeyFromPEM(privateKeyPEM)
 
-        // 2. Build signing string
+        // 2. Build signing string — path must include query string (like Python's path_url)
         let method = request.httpMethod ?? "GET"
-        let path = request.url?.path ?? "/"
+        let url = request.url!
+        let path = url.query.map { "\(url.path)?\($0)" } ?? url.path
         let timestamp = isoTimestamp()
         let body = request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? ""
         let signingString = "\(method)\n\(path)\n\(timestamp)\n\(body)\n\(adpToken)"
