@@ -964,11 +964,13 @@ final class AppState {
 
     func connectAudible(marketplace: String, adpToken: String, privateKeyPEM: String,
                         accessToken: String, refreshToken: String, deviceSerial: String) {
-        AudibleKeychain.setAccessToken(accessToken)
-        AudibleKeychain.setRefreshToken(refreshToken)
-        AudibleKeychain.setAdpToken(adpToken)
-        AudibleKeychain.setPrivateKeyPEM(privateKeyPEM)
-        AudibleKeychain.setDeviceSerial(deviceSerial)
+        AudibleKeychain.setAll(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            adpToken: adpToken,
+            privateKeyPEM: privateKeyPEM,
+            deviceSerial: deviceSerial
+        )
 
         audibleClient = AudibleClient(
             marketplace: marketplace,
