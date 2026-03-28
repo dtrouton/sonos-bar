@@ -168,13 +168,30 @@ struct AudibleBrowseView: View {
 
                 // Error display
                 if let error = appState.audibleError {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                            .font(.system(size: 11))
-                        Text(error)
-                            .font(.system(size: 11))
-                            .foregroundColor(.orange)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                                .font(.system(size: 11))
+                            Text(error)
+                                .font(.system(size: 11))
+                                .foregroundColor(.orange)
+                        }
+                        HStack(spacing: 8) {
+                            Button("Retry") {
+                                Task {
+                                    await appState.loadAudibleLibrary()
+                                    await appState.loadAudibleOnDeck()
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            Button("Disconnect") {
+                                appState.disconnectAudible()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
                     }
                     .padding(.horizontal, 12)
                 }

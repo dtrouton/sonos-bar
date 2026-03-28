@@ -1012,13 +1012,62 @@ final class AppState {
         Task { await loadAudibleLibrary() }
     }
 
+    /// Attempts to refresh the Audible access token using the stored refresh token.
+    /// On success, recreates the audibleClient with the new token.
+    private func refreshAudibleToken() async -> Bool {
+        guard let refreshToken = AudibleKeychain.getRefreshToken() else { return false }
+        let request = AudibleAuth.buildTokenRefreshRequest(refreshToken: refreshToken)
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let newAccessToken = json["access_token"] as? String else {
+                #if DEBUG
+                print("[AudibleAuth] Token refresh failed")
+                #endif
+                return false
+            }
+            AudibleKeychain.setAccessToken(newAccessToken)
+            // Recreate client with new token
+            if let adpToken = AudibleKeychain.getAdpToken(),
+               let privateKey = AudibleKeychain.getPrivateKeyPEM() {
+                let marketplace = String(AudibleAuth.domain.dropFirst("amazon.".count))
+                audibleClient = AudibleClient(
+                    marketplace: marketplace,
+                    adpToken: adpToken,
+                    privateKeyPEM: privateKey,
+                    accessToken: newAccessToken
+                )
+            }
+            #if DEBUG
+            print("[AudibleAuth] Token refreshed successfully")
+            #endif
+            return true
+        } catch {
+            #if DEBUG
+            print("[AudibleAuth] Token refresh error: \(error)")
+            #endif
+            return false
+        }
+    }
+
     func loadAudibleLibrary() async {
-        guard let client = audibleClient else { return }
+        guard audibleClient != nil else { return }
         isAudibleLoading = true
         defer { isAudibleLoading = false }
         do {
-            audibleBooks = try await client.getLibrary()
+            audibleBooks = try await audibleClient!.getLibrary()
             audibleError = nil
+        } catch AudibleError.unauthorized {
+            // Try refreshing the token once
+            if await refreshAudibleToken(), let client = audibleClient {
+                do {
+                    audibleBooks = try await client.getLibrary()
+                    audibleError = nil
+                    return
+                } catch {}
+            }
+            audibleError = "Session expired. Try disconnecting and signing in again."
         } catch {
             audibleError = "Failed to load library: \(error.localizedDescription)"
         }
@@ -1037,35 +1086,44 @@ final class AppState {
     }
 
     func loadAudibleOnDeck() async {
-        guard let client = audibleClient else { return }
+        guard audibleClient != nil else { return }
         isAudibleLoading = true
         defer { isAudibleLoading = false }
         do {
-            // 1. Fetch library
-            let books = try await client.getLibrary()
-            audibleBooks = books
-
-            // 2. Batch fetch listening positions
-            let asins = books.map(\.asin)
-            guard !asins.isEmpty else {
-                audibleOnDeck = []
-                return
+            try await fetchOnDeck()
+        } catch AudibleError.unauthorized {
+            if await refreshAudibleToken() {
+                do {
+                    try await fetchOnDeck()
+                    return
+                } catch {}
             }
-            let positions = try await client.getListeningPositions(asins: asins)
-
-            // 3. Filter books with position > 0 and pair with position
-            let positionMap = Dictionary(uniqueKeysWithValues: positions.map { ($0.asin, $0.positionMs) })
-            audibleOnDeck = books.compactMap { book in
-                guard let posMs = positionMap[book.asin], posMs > 0 else { return nil }
-                return (book: book, positionMs: posMs)
-            }.sorted { a, b in
-                (a.book.purchaseDate ?? .distantPast) > (b.book.purchaseDate ?? .distantPast)
-            }
-
-            audibleError = nil
+            audibleError = "Session expired. Try disconnecting and signing in again."
         } catch {
             audibleError = "Failed to load on-deck: \(error.localizedDescription)"
         }
+    }
+
+    private func fetchOnDeck() async throws {
+        guard let client = audibleClient else { return }
+        let books = try await client.getLibrary()
+        audibleBooks = books
+
+        let asins = books.map(\.asin)
+        guard !asins.isEmpty else {
+            audibleOnDeck = []
+            return
+        }
+        let positions = try await client.getListeningPositions(asins: asins)
+
+        let positionMap = Dictionary(uniqueKeysWithValues: positions.map { ($0.asin, $0.positionMs) })
+        audibleOnDeck = books.compactMap { book in
+            guard let posMs = positionMap[book.asin], posMs > 0 else { return nil }
+            return (book: book, positionMs: posMs)
+        }.sorted { a, b in
+            (a.book.purchaseDate ?? .distantPast) > (b.book.purchaseDate ?? .distantPast)
+        }
+        audibleError = nil
     }
 
     func searchAudibleBooks(query: String) -> [AudibleBook] {
