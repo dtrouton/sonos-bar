@@ -78,6 +78,29 @@ public final class AudibleClient: Sendable {
         }
     }
 
+    // MARK: - Podcast Episodes
+
+    /// Fetches episodes for a podcast parent ASIN.
+    /// GET /1.0/library?parent_asin={asin}&num_results=1000&response_groups=product_attrs,media,product_desc
+    public func getEpisodes(parentAsin: String) async throws -> [AudibleBook] {
+        let data = try await get("/1.0/library", queryItems: [
+            URLQueryItem(name: "parent_asin", value: parentAsin),
+            URLQueryItem(name: "num_results", value: "1000"),
+            URLQueryItem(name: "response_groups", value: "product_attrs,media,product_desc"),
+            URLQueryItem(name: "sort_by", value: "-PurchaseDate"),
+        ])
+
+        do {
+            let response = try JSONDecoder().decode(LibraryResponse.self, from: data)
+            return response.items
+        } catch {
+            #if DEBUG
+            print("[Audible] Episodes decode error: \(error)")
+            #endif
+            throw error
+        }
+    }
+
     // MARK: - Listening Positions
 
     /// Fetches last listening positions for the given ASINs.

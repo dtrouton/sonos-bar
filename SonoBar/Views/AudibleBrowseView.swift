@@ -214,7 +214,11 @@ struct AudibleBrowseView: View {
                 ForEach(books) { book in
                     Button {
                         searchText = ""
-                        Task { await appState.loadAudibleChapters(asin: book.asin) }
+                        if book.isPodcast {
+                            Task { await appState.loadAudibleEpisodes(parentAsin: book.asin) }
+                        } else {
+                            Task { await appState.loadAudibleChapters(asin: book.asin) }
+                        }
                         navigationPath.append(.chapterList(book))
                     } label: {
                         VStack(spacing: 4) {

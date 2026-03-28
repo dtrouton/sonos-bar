@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - AudibleBook
 
-/// An audiobook from the Audible API.
+/// An audiobook or podcast from the Audible API.
 public struct AudibleBook: Identifiable, Sendable {
     public let asin: String
     public let title: String
@@ -11,6 +11,8 @@ public struct AudibleBook: Identifiable, Sendable {
     public let coverURL: String?
     public let durationMs: Int
     public let purchaseDate: Date?
+    public let isPodcast: Bool
+    public let episodeCount: Int?
 
     public var id: String { asin }
 }
@@ -24,6 +26,9 @@ extension AudibleBook: Codable {
         case productImages = "product_images"
         case durationMs = "runtime_length_ms"
         case purchaseDate = "purchase_date"
+        case contentDeliveryType = "content_delivery_type"
+        case contentType = "content_type"
+        case episodeCount = "episode_count"
     }
 
     /// Intermediate type for the `authors` / `narrators` arrays.
@@ -62,6 +67,11 @@ extension AudibleBook: Codable {
         } else {
             purchaseDate = nil
         }
+
+        let deliveryType = try container.decodeIfPresent(String.self, forKey: .contentDeliveryType) ?? ""
+        let cType = try container.decodeIfPresent(String.self, forKey: .contentType) ?? ""
+        isPodcast = deliveryType == "PodcastParent" || deliveryType == "Periodical" || cType == "Podcast"
+        episodeCount = try container.decodeIfPresent(Int.self, forKey: .episodeCount)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -76,6 +86,10 @@ extension AudibleBook: Codable {
             try container.encode(ProductImages(size500: coverURL), forKey: .productImages)
         }
         try container.encode(durationMs, forKey: .durationMs)
+        if isPodcast {
+            try container.encode("PodcastParent", forKey: .contentDeliveryType)
+        }
+        try container.encodeIfPresent(episodeCount, forKey: .episodeCount)
         if let purchaseDate {
             let formatter = ISO8601DateFormatter()
             try container.encode(formatter.string(from: purchaseDate), forKey: .purchaseDate)

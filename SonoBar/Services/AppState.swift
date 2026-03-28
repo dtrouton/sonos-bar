@@ -956,6 +956,7 @@ final class AppState {
     private(set) var audibleClient: AudibleClient?
     var audibleBooks: [AudibleBook] = []
     var audibleChapters: [AudibleChapter] = []
+    var audibleEpisodes: [AudibleBook] = []
     var audibleOnDeck: [(book: AudibleBook, positionMs: Int)] = []
     var audibleError: String?
     var isAudibleLoading = false
@@ -985,6 +986,7 @@ final class AppState {
         audibleClient = nil
         audibleBooks = []
         audibleChapters = []
+        audibleEpisodes = []
         audibleOnDeck = []
         audibleError = nil
         isAudibleLoading = false
@@ -1105,6 +1107,18 @@ final class AppState {
             audibleError = nil
         } catch {
             audibleError = "Failed to load chapters: \(error.localizedDescription)"
+        }
+    }
+
+    func loadAudibleEpisodes(parentAsin: String) async {
+        guard let client = audibleClient else { return }
+        isAudibleLoading = true
+        defer { isAudibleLoading = false }
+        do {
+            audibleEpisodes = try await client.getEpisodes(parentAsin: parentAsin)
+            audibleError = nil
+        } catch {
+            audibleError = "Failed to load episodes: \(error.localizedDescription)"
         }
     }
 
