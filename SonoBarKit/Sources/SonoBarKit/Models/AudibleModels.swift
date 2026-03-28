@@ -45,8 +45,8 @@ extension AudibleBook: Codable {
         asin = try container.decode(String.self, forKey: .asin)
         title = try container.decode(String.self, forKey: .title)
 
-        let authors = try container.decode([PersonItem].self, forKey: .authors)
-        author = authors.first?.name ?? "Unknown"
+        let authors = try container.decodeIfPresent([PersonItem].self, forKey: .authors)
+        author = authors?.first?.name ?? "Unknown"
 
         let narrators = try container.decodeIfPresent([PersonItem].self, forKey: .narrators)
         narrator = narrators?.first?.name
@@ -54,7 +54,7 @@ extension AudibleBook: Codable {
         let images = try container.decodeIfPresent(ProductImages.self, forKey: .productImages)
         coverURL = images?.size500
 
-        durationMs = try container.decode(Int.self, forKey: .durationMs)
+        durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs) ?? 0
 
         if let dateString = try container.decodeIfPresent(String.self, forKey: .purchaseDate) {
             let formatter = ISO8601DateFormatter()
@@ -178,6 +178,12 @@ public struct AudibleListeningPosition: Sendable, Codable {
         case asin
         case positionMs = "last_position_ms"
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        asin = try container.decode(String.self, forKey: .asin)
+        positionMs = try container.decodeIfPresent(Int.self, forKey: .positionMs) ?? 0
+    }
 }
 
 // MARK: - AudibleListeningPositionResponse
@@ -185,4 +191,26 @@ public struct AudibleListeningPosition: Sendable, Codable {
 /// Wrapper for the listening positions API response.
 public struct AudibleListeningPositionResponse: Sendable, Codable {
     public let items: [AudibleListeningPosition]
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case lastPositions = "last_positions"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Try both possible response shapes
+        if let items = try? container.decode([AudibleListeningPosition].self, forKey: .items) {
+            self.items = items
+        } else if let items = try? container.decode([AudibleListeningPosition].self, forKey: .lastPositions) {
+            self.items = items
+        } else {
+            self.items = []
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(items, forKey: .items)
+    }
 }

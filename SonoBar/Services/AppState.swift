@@ -1052,23 +1052,46 @@ final class AppState {
     }
 
     func loadAudibleLibrary() async {
-        guard audibleClient != nil else { return }
+        guard audibleClient != nil else {
+            #if DEBUG
+            print("[Audible] loadAudibleLibrary: no client")
+            #endif
+            return
+        }
         isAudibleLoading = true
         defer { isAudibleLoading = false }
         do {
+            #if DEBUG
+            print("[Audible] Loading library...")
+            #endif
             audibleBooks = try await audibleClient!.getLibrary()
+            #if DEBUG
+            print("[Audible] Library loaded: \(audibleBooks.count) books")
+            #endif
             audibleError = nil
         } catch AudibleError.unauthorized {
-            // Try refreshing the token once
+            #if DEBUG
+            print("[Audible] Got 401, attempting token refresh...")
+            #endif
             if await refreshAudibleToken(), let client = audibleClient {
                 do {
                     audibleBooks = try await client.getLibrary()
                     audibleError = nil
+                    #if DEBUG
+                    print("[Audible] Library loaded after refresh: \(audibleBooks.count) books")
+                    #endif
                     return
-                } catch {}
+                } catch {
+                    #if DEBUG
+                    print("[Audible] Library still failed after refresh: \(error)")
+                    #endif
+                }
             }
             audibleError = "Session expired. Try disconnecting and signing in again."
         } catch {
+            #if DEBUG
+            print("[Audible] Library load error: \(error)")
+            #endif
             audibleError = "Failed to load library: \(error.localizedDescription)"
         }
     }

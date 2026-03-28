@@ -49,8 +49,15 @@ public final class AudibleClient: Sendable {
             URLQueryItem(name: "sort_by", value: "-PurchaseDate"),
         ])
 
-        let response = try JSONDecoder().decode(LibraryResponse.self, from: data)
-        return response.items
+        do {
+            let response = try JSONDecoder().decode(LibraryResponse.self, from: data)
+            return response.items
+        } catch {
+            #if DEBUG
+            print("[Audible] Library decode error: \(error)")
+            #endif
+            throw error
+        }
     }
 
     // MARK: - Chapters
@@ -75,8 +82,15 @@ public final class AudibleClient: Sendable {
             URLQueryItem(name: "asins", value: asins.joined(separator: ",")),
         ])
 
-        let response = try JSONDecoder().decode(AudibleListeningPositionResponse.self, from: data)
-        return response.items
+        do {
+            let response = try JSONDecoder().decode(AudibleListeningPositionResponse.self, from: data)
+            return response.items
+        } catch {
+            #if DEBUG
+            print("[Audible] Positions decode error: \(error)")
+            #endif
+            throw error
+        }
     }
 
     // MARK: - Cover URL
@@ -104,6 +118,14 @@ public final class AudibleClient: Sendable {
         try AudibleAuth.signRequest(&request, adpToken: adpToken, privateKeyPEM: privateKeyPEM)
 
         let (data, httpResponse) = try await sendRequest(request)
+
+        #if DEBUG
+        print("[Audible] GET \(path) → HTTP \(httpResponse.statusCode)")
+        if let body = String(data: data, encoding: .utf8) {
+            print("[Audible] Response: \(body.prefix(300))")
+        }
+        #endif
+
         try checkStatus(httpResponse)
         return data
     }
