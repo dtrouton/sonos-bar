@@ -11,6 +11,7 @@ public enum SonosService: String, CaseIterable, Sendable {
     case contentDirectory
     case alarmClock
     case deviceProperties
+    case musicServices
 
     /// The UPnP control URL path (relative to device base URL)
     public var controlURL: String {
@@ -29,6 +30,8 @@ public enum SonosService: String, CaseIterable, Sendable {
             return "/AlarmClock/Control"
         case .deviceProperties:
             return "/DeviceProperties/Control"
+        case .musicServices:
+            return "/MusicServices/Control"
         }
     }
 
@@ -49,6 +52,8 @@ public enum SonosService: String, CaseIterable, Sendable {
             return "/AlarmClock/Event"
         case .deviceProperties:
             return "/DeviceProperties/Event"
+        case .musicServices:
+            return "/MusicServices/Event"
         }
     }
 
@@ -69,6 +74,8 @@ public enum SonosService: String, CaseIterable, Sendable {
             return "urn:schemas-upnp-org:service:AlarmClock:1"
         case .deviceProperties:
             return "urn:schemas-upnp-org:service:DeviceProperties:1"
+        case .musicServices:
+            return "urn:schemas-upnp-org:service:MusicServices:1"
         }
     }
 }

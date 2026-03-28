@@ -102,13 +102,13 @@ struct AudibleBrowseView: View {
             Image(systemName: "headphones")
                 .font(.system(size: 28))
                 .foregroundColor(.secondary)
-            Text("Play any Audible book from the Sonos app once, then try again here")
+            Text("Audible not found on your Sonos system. Make sure Audible is linked in the Sonos app.")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
             Button("Retry") {
-                Task { await appState.refreshAllRooms() }
+                Task { await appState.discoverAudibleParams() }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)

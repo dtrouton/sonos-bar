@@ -979,7 +979,25 @@ final class AppState {
             accessToken: accessToken
         )
         audibleError = nil
-        Task { await loadAudibleLibrary() }
+
+        // Auto-discover Sonos Audible params if not already set
+        Task {
+            if sonosAudibleParams == nil, let client = activeClient {
+                if let params = await SonosAudibleParams.discoverFromMusicServices(client: client) {
+                    sonosAudibleParams = params
+                    params.save()
+                }
+            }
+            await loadAudibleLibrary()
+        }
+    }
+
+    func discoverAudibleParams() async {
+        guard let client = activeClient else { return }
+        if let params = await SonosAudibleParams.discoverFromMusicServices(client: client) {
+            sonosAudibleParams = params
+            params.save()
+        }
     }
 
     func disconnectAudible() {
@@ -1010,10 +1028,18 @@ final class AppState {
             accessToken: accessToken
         )
 
-        // Load cached Sonos params
+        // Load cached Sonos params, or discover from MusicServices
         sonosAudibleParams = SonosAudibleParams.load()
 
-        Task { await loadAudibleLibrary() }
+        Task {
+            if sonosAudibleParams == nil, let client = activeClient {
+                if let params = await SonosAudibleParams.discoverFromMusicServices(client: client) {
+                    sonosAudibleParams = params
+                    params.save()
+                }
+            }
+            await loadAudibleLibrary()
+        }
     }
 
     /// Attempts to refresh the Audible access token using the stored refresh token.

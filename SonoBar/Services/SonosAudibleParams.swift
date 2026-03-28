@@ -38,6 +38,21 @@ struct SonosAudibleParams: Equatable {
 
     // MARK: - Discovery
 
+    /// Discovers Audible service params by querying the MusicServices endpoint.
+    /// No need to play an Audible track first.
+    static func discoverFromMusicServices(client: SOAPClient) async -> SonosAudibleParams? {
+        guard let account = try? await MusicServiceDiscovery.findService(sid: 239, client: client) else {
+            return nil
+        }
+        let marketplace = String(AudibleAuth.domain.dropFirst("amazon.".count))
+        return SonosAudibleParams(
+            sid: "239",
+            sn: String(account.sn),
+            desc: account.cdudn,
+            marketplace: marketplace
+        )
+    }
+
     /// Tries to discover Audible service params from room states.
     /// Looks for any media URI containing "sid=239".
     static func discover(from roomStates: [String: RoomSummary]) -> SonosAudibleParams? {
