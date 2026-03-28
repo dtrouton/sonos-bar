@@ -63,14 +63,19 @@ public final class AudibleClient: Sendable {
     // MARK: - Chapters
 
     /// Fetches chapter info for a specific audiobook.
+    /// Returns empty array for non-audio content (podcasts, PDFs, etc.).
     /// GET /1.0/content/{asin}/metadata?response_groups=chapter_info
     public func getChapters(asin: String) async throws -> [AudibleChapter] {
-        let data = try await get("/1.0/content/\(asin)/metadata", queryItems: [
-            URLQueryItem(name: "response_groups", value: "chapter_info"),
-        ])
-
-        let response = try JSONDecoder().decode(AudibleChapterResponse.self, from: data)
-        return response.chapters
+        do {
+            let data = try await get("/1.0/content/\(asin)/metadata", queryItems: [
+                URLQueryItem(name: "response_groups", value: "chapter_info"),
+            ])
+            let response = try JSONDecoder().decode(AudibleChapterResponse.self, from: data)
+            return response.chapters
+        } catch AudibleError.httpError(400) {
+            // Non-audio content (podcasts, PDFs) returns 400 — treat as no chapters
+            return []
+        }
     }
 
     // MARK: - Listening Positions
@@ -79,7 +84,7 @@ public final class AudibleClient: Sendable {
     /// Batches requests in groups of 50 to avoid API validation errors.
     public func getListeningPositions(asins: [String]) async throws -> [AudibleListeningPosition] {
         var allPositions: [AudibleListeningPosition] = []
-        let batchSize = 50
+        let batchSize = 20
 
         for batchStart in stride(from: 0, to: asins.count, by: batchSize) {
             let batchEnd = min(batchStart + batchSize, asins.count)
