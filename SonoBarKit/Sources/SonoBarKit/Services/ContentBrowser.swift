@@ -34,6 +34,12 @@ public enum ContentBrowser {
         )
     }
 
+    /// Browses the root container to discover all available containers.
+    /// Useful for finding container IDs (e.g., Recently Played).
+    public static func browseRoot(client: SOAPClient) async throws -> [ContentItem] {
+        try await browse(client: client, objectID: "0")
+    }
+
     // MARK: - Private
 
     private static func browse(client: SOAPClient, objectID: String) async throws -> [ContentItem] {
