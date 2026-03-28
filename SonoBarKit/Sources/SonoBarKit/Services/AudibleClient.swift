@@ -63,9 +63,9 @@ public final class AudibleClient: Sendable {
     // MARK: - Chapters
 
     /// Fetches chapter info for a specific audiobook.
-    /// GET /1.0/library/{asin}?response_groups=chapter_info
+    /// GET /1.0/content/{asin}/metadata?response_groups=chapter_info
     public func getChapters(asin: String) async throws -> [AudibleChapter] {
-        let data = try await get("/1.0/library/\(asin)", queryItems: [
+        let data = try await get("/1.0/content/\(asin)/metadata", queryItems: [
             URLQueryItem(name: "response_groups", value: "chapter_info"),
         ])
 
@@ -76,21 +76,31 @@ public final class AudibleClient: Sendable {
     // MARK: - Listening Positions
 
     /// Fetches last listening positions for the given ASINs.
-    /// GET /1.0/annotations/lastpositions?asins={asin1,asin2,...}
+    /// Batches requests in groups of 50 to avoid API validation errors.
     public func getListeningPositions(asins: [String]) async throws -> [AudibleListeningPosition] {
-        let data = try await get("/1.0/annotations/lastpositions", queryItems: [
-            URLQueryItem(name: "asins", value: asins.joined(separator: ",")),
-        ])
+        var allPositions: [AudibleListeningPosition] = []
+        let batchSize = 50
 
-        do {
-            let response = try JSONDecoder().decode(AudibleListeningPositionResponse.self, from: data)
-            return response.items
-        } catch {
-            #if DEBUG
-            print("[Audible] Positions decode error: \(error)")
-            #endif
-            throw error
+        for batchStart in stride(from: 0, to: asins.count, by: batchSize) {
+            let batchEnd = min(batchStart + batchSize, asins.count)
+            let batch = Array(asins[batchStart..<batchEnd])
+
+            let data = try await get("/1.0/annotations/lastpositions", queryItems: [
+                URLQueryItem(name: "asins", value: batch.joined(separator: ",")),
+            ])
+
+            do {
+                let response = try JSONDecoder().decode(AudibleListeningPositionResponse.self, from: data)
+                allPositions.append(contentsOf: response.items)
+            } catch {
+                #if DEBUG
+                print("[Audible] Positions decode error: \(error)")
+                #endif
+                throw error
+            }
         }
+
+        return allPositions
     }
 
     // MARK: - Cover URL

@@ -132,7 +132,7 @@ struct AudibleClientTests {
 
         let request = try #require(mock.lastRequest)
         let url = try #require(request.url)
-        #expect(url.path == "/1.0/library/B08G9PRS1K")
+        #expect(url.path == "/1.0/content/B08G9PRS1K/metadata")
         let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
         let responseGroups = components.queryItems?.first(where: { $0.name == "response_groups" })
         #expect(responseGroups?.value == "chapter_info")
