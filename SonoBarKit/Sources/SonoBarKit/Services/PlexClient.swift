@@ -77,12 +77,15 @@ public final class PlexClient: Sendable {
     /// Searches for albums matching a query, optionally within a specific section.
     /// The hubs/search endpoint returns a different structure (Hub array) than other endpoints.
     public func search(query: String, sectionId: String? = nil) async throws -> [PlexAlbum] {
+        // If we have a section ID, search the library directly (always fresh).
+        // Otherwise fall back to hub search (cross-library).
+        if let sectionId {
+            return try await searchLibrary(query: query, sectionId: sectionId)
+        }
+
         var queryItems = [
             URLQueryItem(name: "query", value: query),
         ]
-        if let sectionId {
-            queryItems.append(URLQueryItem(name: "sectionId", value: sectionId))
-        }
 
         let url = try buildURL(path: "/hubs/search", queryItems: queryItems)
         var request = URLRequest(url: url)
@@ -113,6 +116,15 @@ public final class PlexClient: Sendable {
             results.append(contentsOf: items)
         }
         return results
+    }
+
+    /// Searches a specific library section directly, bypassing hubs.
+    /// This always returns fresh results from the library database.
+    private func searchLibrary(query: String, sectionId: String) async throws -> [PlexAlbum] {
+        try await get("/library/sections/\(sectionId)/all", queryItems: [
+            URLQueryItem(name: "type", value: "9"),
+            URLQueryItem(name: "title", value: query),
+        ])
     }
 
     // MARK: - Progress Reporting
