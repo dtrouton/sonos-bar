@@ -26,26 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         Task {
             await appState.startDiscovery()
-            #if DEBUG
-            await runAppleMusicSpikeIfEligible()
-            #endif
         }
     }
-
-    #if DEBUG
-    /// One-shot spike run — fires after discovery completes against the active speaker's
-    /// SOAPClient. Writes everything to Console.app for capture.
-    private func runAppleMusicSpikeIfEligible() async {
-        // Small delay to let zone topology settle.
-        try? await Task.sleep(nanoseconds: 3_000_000_000)
-        guard let device = appState.deviceManager.activeDevice else {
-            print("[Spike] No active device. Select a room in the popover, relaunch to re-run.")
-            return
-        }
-        let client = SOAPClient(host: device.ip)
-        await AppleMusicSpike.run(client: client)
-    }
-    #endif
 
     @objc private func togglePopover() {
         guard let button = statusItem.button else { return }
