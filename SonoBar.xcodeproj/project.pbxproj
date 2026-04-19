@@ -21,17 +21,20 @@
 		420FEF78E739E03CE80D25E7 /* SonosAudibleParams.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91C4A8B2B6BCC1754B493556 /* SonosAudibleParams.swift */; };
 		4689D6ADC8B48002E108A687 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800269C4C7C75C4A798728CF /* AppState.swift */; };
 		49C4A06344D327DA310D159F /* AudibleSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ACD26C87638DB5AEBBEE06F /* AudibleSetupView.swift */; };
+		4B0A7E74A979778F869B8B51 /* AppleMusicAlbumDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11963FCFD4AA55C2452C199B /* AppleMusicAlbumDetailView.swift */; };
 		553D7BE3098C9639F29378D6 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */; };
 		5C29513A59EF5A02C0229FCD /* ContentGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12E5D60423F51E2C500E16A /* ContentGridView.swift */; };
 		62C689D2E6D4F5C6D22D62E7 /* AudibleChapterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B502F855B022E2DE694DC4B /* AudibleChapterView.swift */; };
 		64A86350DDACD5F98007D78A /* ContentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */; };
 		66963FAFDAADC97CA2ED6BEC /* AudibleBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A10961B0FB66087DFE4E574 /* AudibleBrowseView.swift */; };
+		682BFD18245E45DEC0D2D675 /* AppleMusicArtistDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F56714A942EAB338CCD8514A /* AppleMusicArtistDetailView.swift */; };
 		6AF84BC0085DB8264EEA8258 /* PlexAlbumListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB1B17CCC2EFD4AC32E6F489 /* PlexAlbumListView.swift */; };
 		827BD66207075FB6075E8145 /* BrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB389F9F52B80716CD445D77 /* BrowseView.swift */; };
 		8BCEDD853BCCC339DE161B46 /* PopoverContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09818E01943EFFEBABA7691D /* PopoverContentView.swift */; };
 		8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 022505363F7555E2870061A0 /* ArtworkCache.swift */; };
 		8FE4E553B79D35133E8588CB /* PlexBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF9FABE6C6FF90235060977B /* PlexBrowseView.swift */; };
 		C5BA2C06F8F13D25501050EB /* SonoBarKit in Frameworks */ = {isa = PBXBuildFile; productRef = C47C1DE3A31D9B47495857F8 /* SonoBarKit */; };
+		C7B49E9D4F8FAA1E851DB3F4 /* AppleMusicSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAF8243D57FC509D01A3298E /* AppleMusicSearchView.swift */; };
 		CCCF23F5E5A602EEDB496806 /* PlexTrackListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DE28311D086FF74318D1EB4 /* PlexTrackListView.swift */; };
 		D8CB934348BC7CE5F724ADE0 /* PlexKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6A41736B2E10F200C72E57F /* PlexKeychain.swift */; };
 		FD51B87724CFCFDC95F6B0A9 /* SonoBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9326A0F381A56CC142EDB979 /* SonoBarApp.swift */; };
@@ -40,6 +43,7 @@
 /* Begin PBXFileReference section */
 		022505363F7555E2870061A0 /* ArtworkCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkCache.swift; sourceTree = "<group>"; };
 		09818E01943EFFEBABA7691D /* PopoverContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverContentView.swift; sourceTree = "<group>"; };
+		11963FCFD4AA55C2452C199B /* AppleMusicAlbumDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicAlbumDetailView.swift; sourceTree = "<group>"; };
 		1DE28311D086FF74318D1EB4 /* PlexTrackListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexTrackListView.swift; sourceTree = "<group>"; };
 		2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSwitcherView.swift; sourceTree = "<group>"; };
@@ -60,12 +64,14 @@
 		BB9D824EAECC0328626F8B38 /* QueueListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueListView.swift; sourceTree = "<group>"; };
 		C12E5D60423F51E2C500E16A /* ContentGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentGridView.swift; sourceTree = "<group>"; };
 		C2B4BECB3532BB5092506158 /* AlarmFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmFormView.swift; sourceTree = "<group>"; };
+		CAF8243D57FC509D01A3298E /* AppleMusicSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicSearchView.swift; sourceTree = "<group>"; };
 		CB1B17CCC2EFD4AC32E6F489 /* PlexAlbumListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexAlbumListView.swift; sourceTree = "<group>"; };
 		CBAD9C0B171F7A1E02D8299A /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
 		CBFD23982E6BCCE2E2DC58A1 /* PlexSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexSetupView.swift; sourceTree = "<group>"; };
 		D0812108F6CC4FF0BFDECF9D /* SonoBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonoBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1D8BB7D0A3CA49DBF7CE134 /* AudibleKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudibleKeychain.swift; sourceTree = "<group>"; };
 		DCEFC87879C3F2F954F5F464 /* AppleMusicSpike.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicSpike.swift; sourceTree = "<group>"; };
+		F56714A942EAB338CCD8514A /* AppleMusicArtistDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicArtistDetailView.swift; sourceTree = "<group>"; };
 		F6BC742E9E247E08DF56EF6B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		FBBDA7A4ABF3A635C1A6C887 /* VolumeSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeSliderView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -143,6 +149,9 @@
 			children = (
 				C2B4BECB3532BB5092506158 /* AlarmFormView.swift */,
 				6AE39ED123CAC10B8001B1C0 /* AlarmsView.swift */,
+				11963FCFD4AA55C2452C199B /* AppleMusicAlbumDetailView.swift */,
+				F56714A942EAB338CCD8514A /* AppleMusicArtistDetailView.swift */,
+				CAF8243D57FC509D01A3298E /* AppleMusicSearchView.swift */,
 				5A10961B0FB66087DFE4E574 /* AudibleBrowseView.swift */,
 				6B502F855B022E2DE694DC4B /* AudibleChapterView.swift */,
 				9ACD26C87638DB5AEBBEE06F /* AudibleSetupView.swift */,
@@ -238,6 +247,9 @@
 				0080213543DD386C6C589E5B /* AlarmsView.swift in Sources */,
 				0536F53032789CC218E34D83 /* AppDelegate.swift in Sources */,
 				4689D6ADC8B48002E108A687 /* AppState.swift in Sources */,
+				4B0A7E74A979778F869B8B51 /* AppleMusicAlbumDetailView.swift in Sources */,
+				682BFD18245E45DEC0D2D675 /* AppleMusicArtistDetailView.swift in Sources */,
+				C7B49E9D4F8FAA1E851DB3F4 /* AppleMusicSearchView.swift in Sources */,
 				304ADE7A5B646B44446FD388 /* AppleMusicSpike.swift in Sources */,
 				8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */,
 				66963FAFDAADC97CA2ED6BEC /* AudibleBrowseView.swift in Sources */,
