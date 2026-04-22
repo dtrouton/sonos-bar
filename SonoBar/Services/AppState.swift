@@ -1248,26 +1248,31 @@ final class AppState {
     var itunesSearchClient: ITunesSearchClient?
     var appleMusicError: String?
 
-    private static let appleMusicSnKey = "appleMusicSn"
-    private static let appleMusicTokenKey = "appleMusicAccountToken"
+    // Legacy UserDefaults keys from the V1 storage scheme. Read once on startup to migrate
+    // any pre-existing credentials into the Keychain, then deleted.
+    private static let legacyAppleMusicSnKey = "appleMusicSn"
+    private static let legacyAppleMusicTokenKey = "appleMusicAccountToken"
 
     private static func loadCachedAppleMusicCredentials() -> AppleMusicCredentials? {
+        if let creds = AppleMusicKeychain.getCredentials() { return creds }
+
+        // Migrate V1 UserDefaults storage into Keychain if present.
         let d = UserDefaults.standard
-        guard let token = d.string(forKey: appleMusicTokenKey), !token.isEmpty else { return nil }
-        let sn = d.integer(forKey: appleMusicSnKey)
-        return AppleMusicCredentials(sn: sn, accountToken: token)
+        guard let token = d.string(forKey: legacyAppleMusicTokenKey), !token.isEmpty else { return nil }
+        let sn = d.integer(forKey: legacyAppleMusicSnKey)
+        let creds = AppleMusicCredentials(sn: sn, accountToken: token)
+        AppleMusicKeychain.setCredentials(creds)
+        d.removeObject(forKey: legacyAppleMusicSnKey)
+        d.removeObject(forKey: legacyAppleMusicTokenKey)
+        return creds
     }
 
     private func saveAppleMusicCredentials(_ creds: AppleMusicCredentials) {
-        let d = UserDefaults.standard
-        d.set(creds.sn, forKey: Self.appleMusicSnKey)
-        d.set(creds.accountToken, forKey: Self.appleMusicTokenKey)
+        AppleMusicKeychain.setCredentials(creds)
     }
 
     private func clearAppleMusicCredentials() {
-        let d = UserDefaults.standard
-        d.removeObject(forKey: Self.appleMusicSnKey)
-        d.removeObject(forKey: Self.appleMusicTokenKey)
+        AppleMusicKeychain.deleteCredentials()
         appleMusicCredentials = nil
     }
 

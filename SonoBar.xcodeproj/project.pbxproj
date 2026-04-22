@@ -14,6 +14,7 @@
 		0F33F3ED2BD864B9851AFB8D /* RoomSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */; };
 		14BF7B0AB69F913251D3FB97 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CAA9453A6C8F70A30772D34 /* SettingsStore.swift */; };
 		15ACE83280064F3BBC38EFFF /* QueueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9D824EAECC0328626F8B38 /* QueueListView.swift */; };
+		18015CCFE6C5CE60D279DC00 /* AppleMusicKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4808848954EEB27008D89B9F /* AppleMusicKeychain.swift */; };
 		1BE314339349CE9E82CBE5C6 /* PlexSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBFD23982E6BCCE2E2DC58A1 /* PlexSetupView.swift */; };
 		28806D365CEAE34308004FF2 /* MediaKeyController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5B929E0AF767FBF59460250 /* MediaKeyController.swift */; };
 		29EB4CE25D0E5CC66541B27F /* AudibleKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D8BB7D0A3CA49DBF7CE134 /* AudibleKeychain.swift */; };
@@ -46,6 +47,7 @@
 		1DE28311D086FF74318D1EB4 /* PlexTrackListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexTrackListView.swift; sourceTree = "<group>"; };
 		2CDE892D81AD60CE26B38EBB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		34FFB2E8916DABC6D1EB7607 /* RoomSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSwitcherView.swift; sourceTree = "<group>"; };
+		4808848954EEB27008D89B9F /* AppleMusicKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicKeychain.swift; sourceTree = "<group>"; };
 		52C2B41DDD188B1FFEB76B97 /* ContentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentListView.swift; sourceTree = "<group>"; };
 		5A10961B0FB66087DFE4E574 /* AudibleBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudibleBrowseView.swift; sourceTree = "<group>"; };
 		5CAA9453A6C8F70A30772D34 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
@@ -172,6 +174,7 @@
 		F12F2B43E6B89FFEAB48591D /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				4808848954EEB27008D89B9F /* AppleMusicKeychain.swift */,
 				800269C4C7C75C4A798728CF /* AppState.swift */,
 				D1D8BB7D0A3CA49DBF7CE134 /* AudibleKeychain.swift */,
 				A6A41736B2E10F200C72E57F /* PlexKeychain.swift */,
@@ -246,6 +249,7 @@
 				4689D6ADC8B48002E108A687 /* AppState.swift in Sources */,
 				4B0A7E74A979778F869B8B51 /* AppleMusicAlbumDetailView.swift in Sources */,
 				682BFD18245E45DEC0D2D675 /* AppleMusicArtistDetailView.swift in Sources */,
+				18015CCFE6C5CE60D279DC00 /* AppleMusicKeychain.swift in Sources */,
 				C7B49E9D4F8FAA1E851DB3F4 /* AppleMusicSearchView.swift in Sources */,
 				8C376F5115191BEFD07A3574 /* ArtworkCache.swift in Sources */,
 				66963FAFDAADC97CA2ED6BEC /* AudibleBrowseView.swift in Sources */,
