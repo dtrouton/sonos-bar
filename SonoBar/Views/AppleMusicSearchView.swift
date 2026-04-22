@@ -119,7 +119,9 @@ struct AppleMusicSearchView: View {
     private func tracksSection(_ tracks: [AppleMusicTrack]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Tracks").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-            LazyVStack(spacing: 0) {
+            // Plain VStack inside the outer LazyVStack — nesting LazyVStacks defeats
+            // the outer's laziness by forcing eager child expansion.
+            VStack(spacing: 0) {
                 ForEach(tracks) { track in
                     Button { Task { await appState.appendAppleMusicTrack(track) } } label: {
                         rowContent(artwork: track.artworkURL, title: track.title, subtitle: track.artist)
@@ -132,7 +134,7 @@ struct AppleMusicSearchView: View {
     private func albumsSection(_ albums: [AppleMusicAlbum]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Albums").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-            LazyVStack(spacing: 0) {
+            VStack(spacing: 0) {
                 ForEach(albums) { album in
                     Button { selectedAlbum = album } label: {
                         rowContent(artwork: album.artworkURL, title: album.title, subtitle: album.artist)
@@ -145,7 +147,7 @@ struct AppleMusicSearchView: View {
     private func artistsSection(_ artists: [AppleMusicArtist]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Artists").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-            LazyVStack(spacing: 0) {
+            VStack(spacing: 0) {
                 ForEach(artists) { artist in
                     Button { selectedArtist = artist } label: {
                         rowContent(artwork: nil, title: artist.name, subtitle: nil)
