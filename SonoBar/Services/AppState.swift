@@ -106,6 +106,9 @@ final class AppState {
                 await self.refreshPlayback()
             }
         }
+
+        initITunesSearchClient()
+        await discoverAppleMusicCredentials()
     }
 
     func refreshPlayback() async {
@@ -1237,5 +1240,148 @@ final class AppState {
 
     func playAudibleChapter(book: AudibleBook, chapter: AudibleChapter) async {
         await playAudibleBook(book: book, seekOffsetMs: chapter.startOffsetMs)
+    }
+
+    // MARK: - Apple Music Integration
+
+    var appleMusicCredentials: AppleMusicCredentials?
+    var itunesSearchClient: ITunesSearchClient?
+
+    private static let appleMusicSnKey = "appleMusicSn"
+    private static let appleMusicTokenKey = "appleMusicAccountToken"
+
+    private static func loadCachedAppleMusicCredentials() -> AppleMusicCredentials? {
+        let d = UserDefaults.standard
+        guard let token = d.string(forKey: appleMusicTokenKey), !token.isEmpty else { return nil }
+        let sn = d.integer(forKey: appleMusicSnKey)
+        return AppleMusicCredentials(sn: sn, accountToken: token)
+    }
+
+    private func saveAppleMusicCredentials(_ creds: AppleMusicCredentials) {
+        let d = UserDefaults.standard
+        d.set(creds.sn, forKey: Self.appleMusicSnKey)
+        d.set(creds.accountToken, forKey: Self.appleMusicTokenKey)
+    }
+
+    private func clearAppleMusicCredentials() {
+        let d = UserDefaults.standard
+        d.removeObject(forKey: Self.appleMusicSnKey)
+        d.removeObject(forKey: Self.appleMusicTokenKey)
+        appleMusicCredentials = nil
+    }
+
+    /// Loads cached Apple Music credentials or extracts them from the speaker's favorites.
+    func discoverAppleMusicCredentials() async {
+        if let cached = Self.loadCachedAppleMusicCredentials() {
+            appleMusicCredentials = cached
+        }
+        guard let client = activeClient else { return }
+        do {
+            let favorites = try await client.callAction(
+                service: .contentDirectory,
+                action: "Browse",
+                params: [
+                    ("ObjectID", "FV:2"),
+                    ("BrowseFlag", "BrowseDirectChildren"),
+                    ("Filter", "*"),
+                    ("StartingIndex", "0"),
+                    ("RequestedCount", "100"),
+                    ("SortCriteria", "")
+                ]
+            )
+            if let didl = favorites["Result"],
+               let creds = AppleMusicCredentialsExtractor.extract(favoritesDIDL: didl) {
+                appleMusicCredentials = creds
+                saveAppleMusicCredentials(creds)
+            }
+        } catch {
+            #if DEBUG
+            print("[AppState] Apple Music credentials discovery failed: \(error)")
+            #endif
+        }
+    }
+
+    func initITunesSearchClient() {
+        itunesSearchClient = ITunesSearchClient(country: storefrontCountry())
+    }
+
+    private func storefrontCountry() -> String {
+        if let marketplace = sonosAudibleParams?.marketplace {
+            switch marketplace.lowercased() {
+            case "co.uk": return "GB"
+            case "com":   return "US"
+            case "de":    return "DE"
+            case "fr":    return "FR"
+            case "co.jp": return "JP"
+            case "ca":    return "CA"
+            case "com.au": return "AU"
+            default: return "US"
+            }
+        }
+        return "US"
+    }
+
+    func appendAppleMusicTrack(_ track: AppleMusicTrack) async {
+        await appendAppleMusic(.track(track))
+    }
+
+    func appendAppleMusicAlbum(_ album: AppleMusicAlbum) async {
+        await appendAppleMusic(.album(album))
+    }
+
+    private func appendAppleMusic(_ item: AppleMusicPlayable) async {
+        guard let creds = appleMusicCredentials,
+              let controller = activeController,
+              let device = deviceManager.activeDevice,
+              let group = deviceManager.group(for: device.uuid) else { return }
+        let uri: String
+        switch item {
+        case .track(let t): uri = AppleMusicURIs.trackURI(id: t.id, sn: creds.sn)
+        case .album(let a): uri = AppleMusicURIs.albumContainerURI(id: a.id)
+        }
+        let didl = AppleMusicURIs.didl(for: item, credentials: creds)
+
+        // Phase 1: add to queue. If this throws, credentials are likely stale.
+        let firstTrackNumber: Int
+        do {
+            firstTrackNumber = try await controller.addToQueue(uri: uri, metadata: didl)
+        } catch {
+            clearAppleMusicCredentials()
+            #if DEBUG
+            print("[AppState] Apple Music addToQueue failed: \(error)")
+            #endif
+            return
+        }
+
+        // Phase 2: if the speaker is already playing from its queue, leave it alone —
+        // the user is building a queue while something else plays. Otherwise, make sure
+        // the transport is pointed at the queue, then seek to the newly inserted track
+        // and start playing.
+        guard firstTrackNumber > 0 else { return }
+
+        let state = (try? await controller.getTransportState()) ?? .stopped
+        let mediaInfo = try? await controller.getMediaInfo()
+        let isOnQueue = mediaInfo?.uri.hasPrefix("x-rincon-queue:") ?? false
+
+        if state == .playing && isOnQueue {
+            return  // Don't interrupt active playback.
+        }
+
+        do {
+            if !isOnQueue {
+                // Speaker is pointed at TV/radio/other source — switch to the queue.
+                let queueURI = "x-rincon-queue:\(group.coordinatorUUID)#0"
+                try await controller.playURI(queueURI, metadata: "")
+            }
+            try await controller.seekToTrack(firstTrackNumber)
+            if state != .playing {
+                try await controller.play()
+            }
+            await refreshPlayback()
+        } catch {
+            #if DEBUG
+            print("[AppState] Apple Music auto-play failed (queue already appended): \(error)")
+            #endif
+        }
     }
 }

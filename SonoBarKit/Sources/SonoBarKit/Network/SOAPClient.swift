@@ -86,7 +86,10 @@ public final class SOAPClient: Sendable {
             SOAPEnvelope.soapActionHeader(service: service, action: action),
             forHTTPHeaderField: "SOAPACTION"
         )
-        request.timeoutInterval = 5
+        // 10s is enough for slow operations like SetAVTransportURI switching sources.
+        // Most SOAP actions complete in <1s; the longer cap prevents false-negative timeouts
+        // on speakers that take longer to ACK transport changes.
+        request.timeoutInterval = 10
         request.httpBody = body.data(using: .utf8)
 
         let (data, httpResponse) = try await httpClient.send(request)

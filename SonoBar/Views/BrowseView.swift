@@ -6,6 +6,7 @@ enum BrowseSegment: String, CaseIterable {
     case recents = "Recents"
     case plex = "Plex"
     case audible = "Audible"
+    case appleMusic = "Apple Music"
 }
 
 struct BrowseView: View {
@@ -41,6 +42,8 @@ struct BrowseView: View {
                 PlexBrowseView()
             case .audible:
                 AudibleBrowseView()
+            case .appleMusic:
+                AppleMusicSearchView()
             }
         }
     }

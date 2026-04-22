@@ -24,7 +24,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rootView: PopoverContentView()
                 .environment(appState)
         )
-        Task { await appState.startDiscovery() }
+        Task {
+            await appState.startDiscovery()
+        }
     }
 
     @objc private func togglePopover() {
