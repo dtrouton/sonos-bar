@@ -205,9 +205,12 @@ public final class PlaybackController: Sendable {
         )
     }
 
-    /// Adds a track to the end of the Sonos queue.
-    public func addToQueue(uri: String, metadata: String) async throws {
-        _ = try await client.callAction(
+    /// Adds a track (or container URI) to the end of the Sonos queue.
+    /// Returns the 1-based track number at which the enqueued content starts,
+    /// or 0 if the speaker didn't report a position.
+    @discardableResult
+    public func addToQueue(uri: String, metadata: String) async throws -> Int {
+        let result = try await client.callAction(
             service: .avTransport,
             action: "AddURIToQueue",
             params: [
@@ -218,6 +221,7 @@ public final class PlaybackController: Sendable {
                 ("EnqueueAsNext", "0")
             ]
         )
+        return Int(result["FirstTrackNumberEnqueued"] ?? "0") ?? 0
     }
 
     // MARK: - Play URI

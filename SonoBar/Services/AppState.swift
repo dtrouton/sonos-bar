@@ -1331,21 +1331,47 @@ final class AppState {
 
     private func appendAppleMusic(_ item: AppleMusicPlayable) async {
         guard let creds = appleMusicCredentials,
-              let controller = activeController else { return }
+              let controller = activeController,
+              let device = deviceManager.activeDevice,
+              let group = deviceManager.group(for: device.uuid) else { return }
         let uri: String
         switch item {
         case .track(let t): uri = AppleMusicURIs.trackURI(id: t.id, sn: creds.sn)
         case .album(let a): uri = AppleMusicURIs.albumContainerURI(id: a.id)
         }
         let didl = AppleMusicURIs.didl(for: item, credentials: creds)
+
+        // Phase 1: add to queue. If this throws, credentials are likely stale.
+        let firstTrackNumber: Int
         do {
-            try await controller.addToQueue(uri: uri, metadata: didl)
+            firstTrackNumber = try await controller.addToQueue(uri: uri, metadata: didl)
         } catch {
-            // Speaker rejected our DIDL — likely stale credentials. Force re-discovery on next run.
             clearAppleMusicCredentials()
             #if DEBUG
-            print("[AppState] Apple Music append failed: \(error)")
+            print("[AppState] Apple Music addToQueue failed: \(error)")
             #endif
+            return
+        }
+
+        // Phase 2: if the speaker isn't already playing from its queue, point the transport
+        // at the queue and seek to the newly inserted track. Otherwise leave it alone —
+        // the user is building a queue while something else plays.
+        let state = (try? await controller.getTransportState()) ?? .stopped
+        let mediaInfo = try? await controller.getMediaInfo()
+        let isPlayingFromQueue = state == .playing
+            && (mediaInfo?.uri.hasPrefix("x-rincon-queue:") ?? false)
+
+        if !isPlayingFromQueue, firstTrackNumber > 0 {
+            do {
+                let queueURI = "x-rincon-queue:\(group.coordinatorUUID)#0"
+                try await controller.playURI(queueURI, metadata: "")
+                try await controller.seekToTrack(firstTrackNumber)
+                await refreshPlayback()
+            } catch {
+                #if DEBUG
+                print("[AppState] Apple Music auto-play failed (queue already appended): \(error)")
+                #endif
+            }
         }
     }
 }
