@@ -1353,25 +1353,35 @@ final class AppState {
             return
         }
 
-        // Phase 2: if the speaker isn't already playing from its queue, point the transport
-        // at the queue and seek to the newly inserted track. Otherwise leave it alone —
-        // the user is building a queue while something else plays.
+        // Phase 2: if the speaker is already playing from its queue, leave it alone —
+        // the user is building a queue while something else plays. Otherwise, make sure
+        // the transport is pointed at the queue, then seek to the newly inserted track
+        // and start playing.
+        guard firstTrackNumber > 0 else { return }
+
         let state = (try? await controller.getTransportState()) ?? .stopped
         let mediaInfo = try? await controller.getMediaInfo()
-        let isPlayingFromQueue = state == .playing
-            && (mediaInfo?.uri.hasPrefix("x-rincon-queue:") ?? false)
+        let isOnQueue = mediaInfo?.uri.hasPrefix("x-rincon-queue:") ?? false
 
-        if !isPlayingFromQueue, firstTrackNumber > 0 {
-            do {
+        if state == .playing && isOnQueue {
+            return  // Don't interrupt active playback.
+        }
+
+        do {
+            if !isOnQueue {
+                // Speaker is pointed at TV/radio/other source — switch to the queue.
                 let queueURI = "x-rincon-queue:\(group.coordinatorUUID)#0"
                 try await controller.playURI(queueURI, metadata: "")
-                try await controller.seekToTrack(firstTrackNumber)
-                await refreshPlayback()
-            } catch {
-                #if DEBUG
-                print("[AppState] Apple Music auto-play failed (queue already appended): \(error)")
-                #endif
             }
+            try await controller.seekToTrack(firstTrackNumber)
+            if state != .playing {
+                try await controller.play()
+            }
+            await refreshPlayback()
+        } catch {
+            #if DEBUG
+            print("[AppState] Apple Music auto-play failed (queue already appended): \(error)")
+            #endif
         }
     }
 }

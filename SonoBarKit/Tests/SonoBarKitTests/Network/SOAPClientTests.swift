@@ -74,7 +74,7 @@ struct SOAPClientTests {
         #expect(snapshot.method == "POST")
         #expect(snapshot.contentType == "text/xml; charset=utf-8")
         #expect(snapshot.soapAction == "\"urn:schemas-upnp-org:service:RenderingControl:1#GetVolume\"")
-        #expect(snapshot.timeout == 5)
+        #expect(snapshot.timeout == 10)
 
         let bodyString = try #require(snapshot.bodyString)
         #expect(bodyString.contains("<u:GetVolume"))
