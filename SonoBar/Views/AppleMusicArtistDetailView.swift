@@ -12,57 +12,69 @@ struct AppleMusicArtistDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button("Close") { dismiss() }.buttonStyle(.plain).font(.system(size: 11))
-                Spacer()
-                Text("Top tracks — \(artist.name)")
-                    .font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                Spacer()
-                Color.clear.frame(width: 40)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            header
             Divider()
+            bodyContent
+        }
+        .frame(width: 360, height: 480)
+        .task { await load() }
+    }
 
-            if let error = errorMessage, tracks.isEmpty {
-                VStack(spacing: 8) {
-                    Text(error).font(.system(size: 11)).foregroundColor(.secondary)
-                    Button("Retry") { Task { await load() } }.buttonStyle(.plain).font(.system(size: 11))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if isLoading && tracks.isEmpty {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(tracks.enumerated()), id: \.element.id) { index, t in
-                            Button {
-                                Task { await appState.appendAppleMusicTrack(t) }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Text("\(index + 1)")
-                                        .font(.system(size: 11).monospacedDigit())
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 24, alignment: .trailing)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(t.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
-                                        if let album = t.album {
-                                            Text(album).font(.system(size: 10))
-                                                .foregroundColor(.secondary).lineLimit(1)
-                                        }
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 6)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
+    private var header: some View {
+        HStack {
+            Button("Close") { dismiss() }.buttonStyle(.plain).font(.system(size: 11))
+            Spacer()
+            Text("Top tracks — \(artist.name)")
+                .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+            Spacer()
+            Color.clear.frame(width: 40)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var bodyContent: some View {
+        if let error = errorMessage, tracks.isEmpty {
+            VStack(spacing: 8) {
+                Text(error).font(.system(size: 11)).foregroundColor(.secondary)
+                Button("Retry") { Task { await load() } }.buttonStyle(.plain).font(.system(size: 11))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if isLoading && tracks.isEmpty {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(tracks.enumerated()), id: \.element.id) { index, t in
+                        Button {
+                            Task { await appState.appendAppleMusicTrack(t) }
+                        } label: {
+                            trackRow(index: index + 1, track: t)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
-        .frame(width: 360, height: 480)
-        .task { await load() }
+    }
+
+    private func trackRow(index: Int, track: AppleMusicTrack) -> some View {
+        HStack(spacing: 8) {
+            Text("\(index)")
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 24, alignment: .trailing)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(track.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                if let album = track.album {
+                    Text(album).font(.system(size: 10))
+                        .foregroundColor(.secondary).lineLimit(1)
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 
     private func load() async {

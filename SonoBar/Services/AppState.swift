@@ -1246,27 +1246,33 @@ final class AppState {
 
     var appleMusicCredentials: AppleMusicCredentials?
     var itunesSearchClient: ITunesSearchClient?
+    var appleMusicError: String?
 
-    private static let appleMusicSnKey = "appleMusicSn"
-    private static let appleMusicTokenKey = "appleMusicAccountToken"
+    // Legacy UserDefaults keys from the V1 storage scheme. Read once on startup to migrate
+    // any pre-existing credentials into the Keychain, then deleted.
+    private static let legacyAppleMusicSnKey = "appleMusicSn"
+    private static let legacyAppleMusicTokenKey = "appleMusicAccountToken"
 
     private static func loadCachedAppleMusicCredentials() -> AppleMusicCredentials? {
+        if let creds = AppleMusicKeychain.getCredentials() { return creds }
+
+        // Migrate V1 UserDefaults storage into Keychain if present.
         let d = UserDefaults.standard
-        guard let token = d.string(forKey: appleMusicTokenKey), !token.isEmpty else { return nil }
-        let sn = d.integer(forKey: appleMusicSnKey)
-        return AppleMusicCredentials(sn: sn, accountToken: token)
+        guard let token = d.string(forKey: legacyAppleMusicTokenKey), !token.isEmpty else { return nil }
+        let sn = d.integer(forKey: legacyAppleMusicSnKey)
+        let creds = AppleMusicCredentials(sn: sn, accountToken: token)
+        AppleMusicKeychain.setCredentials(creds)
+        d.removeObject(forKey: legacyAppleMusicSnKey)
+        d.removeObject(forKey: legacyAppleMusicTokenKey)
+        return creds
     }
 
     private func saveAppleMusicCredentials(_ creds: AppleMusicCredentials) {
-        let d = UserDefaults.standard
-        d.set(creds.sn, forKey: Self.appleMusicSnKey)
-        d.set(creds.accountToken, forKey: Self.appleMusicTokenKey)
+        AppleMusicKeychain.setCredentials(creds)
     }
 
     private func clearAppleMusicCredentials() {
-        let d = UserDefaults.standard
-        d.removeObject(forKey: Self.appleMusicSnKey)
-        d.removeObject(forKey: Self.appleMusicTokenKey)
+        AppleMusicKeychain.deleteCredentials()
         appleMusicCredentials = nil
     }
 
@@ -1306,6 +1312,9 @@ final class AppState {
     }
 
     private func storefrontCountry() -> String {
+        // Prefer Audible marketplace when known — Sonos users usually keep services
+        // aligned to the same region. Fall back to the OS locale so first-launch
+        // searches are regional-correct before Audible discovery completes.
         if let marketplace = sonosAudibleParams?.marketplace {
             switch marketplace.lowercased() {
             case "co.uk": return "GB"
@@ -1315,8 +1324,11 @@ final class AppState {
             case "co.jp": return "JP"
             case "ca":    return "CA"
             case "com.au": return "AU"
-            default: return "US"
+            default: break  // unknown marketplace → fall through to locale
             }
+        }
+        if let region = Locale.current.region?.identifier, !region.isEmpty {
+            return region
         }
         return "US"
     }
@@ -1341,12 +1353,15 @@ final class AppState {
         }
         let didl = AppleMusicURIs.didl(for: item, credentials: creds)
 
+        appleMusicError = nil
+
         // Phase 1: add to queue. If this throws, credentials are likely stale.
         let firstTrackNumber: Int
         do {
             firstTrackNumber = try await controller.addToQueue(uri: uri, metadata: didl)
         } catch {
             clearAppleMusicCredentials()
+            appleMusicError = "Couldn't add to queue. Favorite a track in the Sonos app to refresh credentials."
             #if DEBUG
             print("[AppState] Apple Music addToQueue failed: \(error)")
             #endif
@@ -1379,6 +1394,7 @@ final class AppState {
             }
             await refreshPlayback()
         } catch {
+            appleMusicError = "Added to queue, but playback didn't start. Try again."
             #if DEBUG
             print("[AppState] Apple Music auto-play failed (queue already appended): \(error)")
             #endif

@@ -35,12 +35,22 @@ struct AppleMusicSearchView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 0) { searchBar; resultsBody }
+        VStack(spacing: 0) {
+            searchBar
+            errorBanner
+            resultsBody
+        }
     }
 
     private var searchBar: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundColor(.secondary).font(.system(size: 11))
+            // Swap the magnifier for a spinner while a search is in flight, so users
+            // get feedback on every query — not just the first one.
+            if isSearching {
+                ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 14, height: 14)
+            } else {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary).font(.system(size: 11))
+            }
             TextField("Search Apple Music", text: $query)
                 .textFieldStyle(.plain).font(.system(size: 12))
                 .onChange(of: query) { _, newValue in scheduleSearch(newValue) }
@@ -55,6 +65,24 @@ struct AppleMusicSearchView: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(8)
         .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private var errorBanner: some View {
+        if let error = appState.appleMusicError {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                    .font(.system(size: 11))
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange)
+                    .lineLimit(2)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
+        }
     }
 
     @ViewBuilder
@@ -91,7 +119,9 @@ struct AppleMusicSearchView: View {
     private func tracksSection(_ tracks: [AppleMusicTrack]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Tracks").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-            LazyVStack(spacing: 0) {
+            // Plain VStack inside the outer LazyVStack — nesting LazyVStacks defeats
+            // the outer's laziness by forcing eager child expansion.
+            VStack(spacing: 0) {
                 ForEach(tracks) { track in
                     Button { Task { await appState.appendAppleMusicTrack(track) } } label: {
                         rowContent(artwork: track.artworkURL, title: track.title, subtitle: track.artist)
@@ -104,7 +134,7 @@ struct AppleMusicSearchView: View {
     private func albumsSection(_ albums: [AppleMusicAlbum]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Albums").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-            LazyVStack(spacing: 0) {
+            VStack(spacing: 0) {
                 ForEach(albums) { album in
                     Button { selectedAlbum = album } label: {
                         rowContent(artwork: album.artworkURL, title: album.title, subtitle: album.artist)
@@ -117,7 +147,7 @@ struct AppleMusicSearchView: View {
     private func artistsSection(_ artists: [AppleMusicArtist]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Artists").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-            LazyVStack(spacing: 0) {
+            VStack(spacing: 0) {
                 ForEach(artists) { artist in
                     Button { selectedArtist = artist } label: {
                         rowContent(artwork: nil, title: artist.name, subtitle: nil)
