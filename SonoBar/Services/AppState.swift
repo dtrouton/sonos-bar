@@ -1246,6 +1246,7 @@ final class AppState {
 
     var appleMusicCredentials: AppleMusicCredentials?
     var itunesSearchClient: ITunesSearchClient?
+    var appleMusicError: String?
 
     private static let appleMusicSnKey = "appleMusicSn"
     private static let appleMusicTokenKey = "appleMusicAccountToken"
@@ -1306,6 +1307,9 @@ final class AppState {
     }
 
     private func storefrontCountry() -> String {
+        // Prefer Audible marketplace when known — Sonos users usually keep services
+        // aligned to the same region. Fall back to the OS locale so first-launch
+        // searches are regional-correct before Audible discovery completes.
         if let marketplace = sonosAudibleParams?.marketplace {
             switch marketplace.lowercased() {
             case "co.uk": return "GB"
@@ -1315,8 +1319,11 @@ final class AppState {
             case "co.jp": return "JP"
             case "ca":    return "CA"
             case "com.au": return "AU"
-            default: return "US"
+            default: break  // unknown marketplace → fall through to locale
             }
+        }
+        if let region = Locale.current.region?.identifier, !region.isEmpty {
+            return region
         }
         return "US"
     }
@@ -1341,12 +1348,15 @@ final class AppState {
         }
         let didl = AppleMusicURIs.didl(for: item, credentials: creds)
 
+        appleMusicError = nil
+
         // Phase 1: add to queue. If this throws, credentials are likely stale.
         let firstTrackNumber: Int
         do {
             firstTrackNumber = try await controller.addToQueue(uri: uri, metadata: didl)
         } catch {
             clearAppleMusicCredentials()
+            appleMusicError = "Couldn't add to queue. Favorite a track in the Sonos app to refresh credentials."
             #if DEBUG
             print("[AppState] Apple Music addToQueue failed: \(error)")
             #endif
@@ -1379,6 +1389,7 @@ final class AppState {
             }
             await refreshPlayback()
         } catch {
+            appleMusicError = "Added to queue, but playback didn't start. Try again."
             #if DEBUG
             print("[AppState] Apple Music auto-play failed (queue already appended): \(error)")
             #endif

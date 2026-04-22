@@ -35,12 +35,22 @@ struct AppleMusicSearchView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 0) { searchBar; resultsBody }
+        VStack(spacing: 0) {
+            searchBar
+            errorBanner
+            resultsBody
+        }
     }
 
     private var searchBar: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundColor(.secondary).font(.system(size: 11))
+            // Swap the magnifier for a spinner while a search is in flight, so users
+            // get feedback on every query — not just the first one.
+            if isSearching {
+                ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 14, height: 14)
+            } else {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary).font(.system(size: 11))
+            }
             TextField("Search Apple Music", text: $query)
                 .textFieldStyle(.plain).font(.system(size: 12))
                 .onChange(of: query) { _, newValue in scheduleSearch(newValue) }
@@ -55,6 +65,24 @@ struct AppleMusicSearchView: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(8)
         .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private var errorBanner: some View {
+        if let error = appState.appleMusicError {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                    .font(.system(size: 11))
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange)
+                    .lineLimit(2)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
+        }
     }
 
     @ViewBuilder
