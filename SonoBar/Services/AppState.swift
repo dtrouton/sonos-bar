@@ -107,8 +107,10 @@ final class AppState {
             }
         }
 
-        initITunesSearchClient()
         await discoverAppleMusicCredentials()
+        if appleMusicCredentials != nil {
+            appleMusicAuthStatus = await musicDiscovery.requestAuthorization()
+        }
     }
 
     func refreshPlayback() async {
@@ -1245,7 +1247,8 @@ final class AppState {
     // MARK: - Apple Music Integration
 
     var appleMusicCredentials: AppleMusicCredentials?
-    var itunesSearchClient: ITunesSearchClient?
+    var musicDiscovery: MusicDiscoveryProviding = MusicKitDiscoveryProvider()
+    var appleMusicAuthStatus: MusicAuthStatus = .notDetermined
     var appleMusicError: String?
 
     // Legacy UserDefaults keys from the V1 storage scheme. Read once on startup to migrate
@@ -1307,38 +1310,16 @@ final class AppState {
         }
     }
 
-    func initITunesSearchClient() {
-        itunesSearchClient = ITunesSearchClient(country: storefrontCountry())
-    }
-
-    private func storefrontCountry() -> String {
-        // Prefer Audible marketplace when known — Sonos users usually keep services
-        // aligned to the same region. Fall back to the OS locale so first-launch
-        // searches are regional-correct before Audible discovery completes.
-        if let marketplace = sonosAudibleParams?.marketplace {
-            switch marketplace.lowercased() {
-            case "co.uk": return "GB"
-            case "com":   return "US"
-            case "de":    return "DE"
-            case "fr":    return "FR"
-            case "co.jp": return "JP"
-            case "ca":    return "CA"
-            case "com.au": return "AU"
-            default: break  // unknown marketplace → fall through to locale
-            }
-        }
-        if let region = Locale.current.region?.identifier, !region.isEmpty {
-            return region
-        }
-        return "US"
-    }
-
     func appendAppleMusicTrack(_ track: AppleMusicTrack) async {
         await appendAppleMusic(.track(track))
     }
 
     func appendAppleMusicAlbum(_ album: AppleMusicAlbum) async {
         await appendAppleMusic(.album(album))
+    }
+
+    func appendAppleMusicPlaylist(_ playlist: AppleMusicPlaylist) async {
+        await appendAppleMusic(.playlist(playlist))
     }
 
     private func appendAppleMusic(_ item: AppleMusicPlayable) async {
@@ -1350,6 +1331,7 @@ final class AppState {
         switch item {
         case .track(let t): uri = AppleMusicURIs.trackURI(id: t.id, sn: creds.sn)
         case .album(let a): uri = AppleMusicURIs.albumContainerURI(id: a.id)
+        case .playlist(let p): uri = AppleMusicURIs.playlistContainerURI(id: p.id, isLibrary: p.isLibrary)
         }
         let didl = AppleMusicURIs.didl(for: item, credentials: creds)
 
@@ -1361,7 +1343,7 @@ final class AppState {
             firstTrackNumber = try await controller.addToQueue(uri: uri, metadata: didl)
         } catch {
             clearAppleMusicCredentials()
-            appleMusicError = "Couldn't add to queue. Favorite a track in the Sonos app to refresh credentials."
+            appleMusicError = "Couldn't add to queue. Favorite an Apple Music item in the Sonos app to refresh credentials."
             #if DEBUG
             print("[AppState] Apple Music addToQueue failed: \(error)")
             #endif

@@ -12,5 +12,7 @@
     <string>1</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
+    <key>NSAppleMusicUsageDescription</key>
+    <string>SonoBar uses Apple Music to browse your library and search the catalog, then plays selections on your Sonos speakers.</string>
 </dict>
 </plist>
