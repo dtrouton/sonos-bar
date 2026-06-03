@@ -363,7 +363,7 @@ public protocol MusicDiscoveryProviding: Sendable {
     func libraryPlaylists() async throws -> [AppleMusicPlaylist]
     func libraryAlbums() async throws -> [AppleMusicAlbum]
     func librarySongs() async throws -> [AppleMusicTrack]
-    func playlistTracks(_ playlistId: String) async throws -> [AppleMusicTrack]
+    func playlistTracks(playlistId: String) async throws -> [AppleMusicTrack]
     func albumTracks(albumId: String) async throws -> [AppleMusicTrack]
     func artistTopTracks(artistId: String) async throws -> [AppleMusicTrack]
 }
@@ -409,7 +409,7 @@ final class FakeMusicDiscoveryProvider: MusicDiscoveryProviding, @unchecked Send
         if let e = errorToThrow { throw e }
         return songs
     }
-    func playlistTracks(_ playlistId: String) async throws -> [AppleMusicTrack] {
+    func playlistTracks(playlistId: String) async throws -> [AppleMusicTrack] {
         if let e = errorToThrow { throw e }
         return playlistTracksById[playlistId] ?? []
     }
@@ -557,7 +557,7 @@ public final class MusicKitDiscoveryProvider: MusicDiscoveryProviding, @unchecke
         } catch { throw AppleMusicError.networkError }
     }
 
-    public func playlistTracks(_ playlistId: String) async throws -> [AppleMusicTrack] {
+    public func playlistTracks(playlistId: String) async throws -> [AppleMusicTrack] {
         do {
             var request = MusicLibraryRequest<Playlist>()
             request.filter(matching: \.id, equalTo: MusicItemID(playlistId))
@@ -818,7 +818,7 @@ case .playlist(let p): uri = AppleMusicURIs.playlistContainerURI(id: p.id, isLib
 func appendAppleMusicPlaylist(_ playlist: AppleMusicPlaylist) async {
     let tracks: [AppleMusicTrack]
     do {
-        tracks = try await musicDiscovery.playlistTracks(playlist.id)
+        tracks = try await musicDiscovery.playlistTracks(playlistId: playlist.id)
     } catch {
         appleMusicError = "Couldn't load playlist tracks. Try again."
         return
@@ -907,19 +907,22 @@ Picker("", selection: $mode) {
 .padding(.horizontal, 12).padding(.bottom, 6)
 ```
 
-Render the body by mode: `.search` keeps the existing search bar + `resultsBody`; `.playlists` shows a list loaded from `appState.musicDiscovery.libraryPlaylists()`; `.library` shows albums from `libraryAlbums()`. Reuse the existing `rowContent(...)` and `artworkThumb(...)` helpers. Playlist rows set `selectedPlaylist = playlist`; album rows set `selectedAlbum = album`.
+Render the body by mode: `.search` keeps the existing search bar + `resultsBody`; `.playlists` shows a list loaded from `appState.musicDiscovery.libraryPlaylists()`; `.library` shows the user's saved **albums** then **songs** (two labeled sub-sections, matching the design's "Library albums/songs" scope) loaded from `libraryAlbums()` and `librarySongs()`. Reuse the existing `rowContent(...)` and `artworkThumb(...)` helpers. Playlist rows set `selectedPlaylist = playlist`; album rows set `selectedAlbum = album`; song rows append directly via `Task { await appState.appendAppleMusicTrack(song) }` (a library song whose `id` is non-numeric, i.e. unresolved to a catalog id, is rendered disabled — `.disabled(Int(song.id) == nil)`).
 
 ```swift
 @State private var libraryPlaylists: [AppleMusicPlaylist] = []
 @State private var libraryAlbums: [AppleMusicAlbum] = []
+@State private var librarySongs: [AppleMusicTrack] = []
 @State private var libraryError: String?
 
 private func loadLibrary() async {
     do {
         async let p = appState.musicDiscovery.libraryPlaylists()
         async let a = appState.musicDiscovery.libraryAlbums()
+        async let s = appState.musicDiscovery.librarySongs()
         libraryPlaylists = try await p
         libraryAlbums = try await a
+        librarySongs = try await s
         libraryError = nil
     } catch {
         libraryError = "Couldn't load your library. Retry."
@@ -1076,7 +1079,7 @@ struct AppleMusicPlaylistDetailView: View {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            tracks = try await appState.musicDiscovery.playlistTracks(playlist.id)
+            tracks = try await appState.musicDiscovery.playlistTracks(playlistId: playlist.id)
         } catch {
             errorMessage = "Couldn't load playlist. Try again."
         }
@@ -1160,7 +1163,7 @@ Run the app and verify:
 - [ ] Deny → "Allow Apple Music access in System Settings" state; granting in Settings + relaunch → browsing appears.
 - [ ] Search "bohemian rhapsody" → tracks/albums/artists; tapping a track queues it (verify in Sonos app).
 - [ ] Playlists tab lists your Apple Music playlists; opening one shows tracks; "Add all to queue" works (server-side if Q1 succeeded, per-track if not).
-- [ ] Library tab lists saved albums; opening one + "Add all" works.
+- [ ] Library tab lists saved albums AND saved songs; opening an album + "Add all" works; tapping a library song queues it.
 - [ ] A library-only/uploaded song appears disabled with "Not on Sonos".
 - [ ] Stale-token path: if append fails, credentials clear + the "favorite a track to refresh" message shows.
 - [ ] Relaunch → token loads from Keychain (no re-favoriting needed).
