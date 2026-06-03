@@ -64,6 +64,22 @@ playlists. **Library** items are account-specific: if the Sonos-linked account w
 we extract differs from the MusicKit-signed-in account, that account's library playlists
 won't authorize. Edge case for manual QA; not a V1 blocker.
 
+## Known follow-ups (from final holistic review — non-blocking)
+
+- **Uploaded library albums (no catalog counterpart):** `MusicKitDiscoveryProvider.albumTracks(albumId:)`
+  uses `MusicCatalogResourceRequest<Album>`, which works for *matched* library albums (their
+  `.id` is the numeric catalog id) but returns `[]` for user-*uploaded* albums (library id
+  `l.xxx`). Those drill down to an empty track list. Rare (only affects albums not on Apple
+  Music). Proper fix: detect library-local ids and use `MusicLibraryRequest<Album>.with([.tracks])`,
+  mirroring `playlistTracks`. Deferred — not spiked. QA: open a uploaded/non-catalog album in the
+  Library tab and confirm graceful behavior.
+- **`MusicDiscoveryProviding.currentAuthStatus()`** is implemented by both conformers but not yet
+  called by `AppState` (startup always calls `requestAuthorization()`, which is a no-op when already
+  authorized). Kept as a clean protocol surface; wire it up if a status-without-prompt check is ever
+  needed.
+- Music videos embedded in playlists/albums are now filtered out of track lists (they aren't
+  playable via the Sonos song-URI path).
+
 ## Decision carried into implementation
 
 **Q1 SUCCESS branch is active:**

@@ -1,42 +1,32 @@
-# Apple Music Integration — TODO
+# Apple Music — Status
 
-## Prerequisites
-- [ ] Enroll in Apple Developer Program ($99/yr) at developer.apple.com/programs
-- [ ] Enable MusicKit entitlement for bundle ID in developer portal
-- [ ] Add `NSAppleMusicUsageDescription` to Info.plist
+**The Apple Music integration is implemented.** It now uses **MusicKit** for discovery
+(catalog search + My Playlists + My Library albums/songs) and the existing Sonos playback path
+(constructed `x-rincon-cpcontainer:` / `x-sonos-http:` URIs + an account token extracted from a
+Sonos favorite). The earlier iTunes-Search approach has been removed.
 
-## Implementation Steps
+See:
+- Design: [`docs/superpowers/specs/2026-06-03-apple-music-musickit-rearchitecture-design.md`](docs/superpowers/specs/2026-06-03-apple-music-musickit-rearchitecture-design.md)
+- Plan: [`docs/superpowers/plans/2026-06-03-apple-music-musickit-rearchitecture.md`](docs/superpowers/plans/2026-06-03-apple-music-musickit-rearchitecture.md)
+- Spike (verified library-playlist playback on a live speaker): [`docs/superpowers/notes/2026-06-03-apple-music-musickit-spike.md`](docs/superpowers/notes/2026-06-03-apple-music-musickit-spike.md)
 
-### 1. Service Discovery
-- Query Sonos MusicServices SOAP endpoint to find Apple Music account serial number (`sn`)
-- Similar to how `SonosAudibleParams` discovers Audible's `sid`/`sn` from room state
-- Apple Music service ID on Sonos: `sid=204`, service type: `52231`
+## Remaining before release (require the developer + hardware)
 
-### 2. MusicKit Library Browsing
-- `MusicAuthorization.request()` for user consent
-- `MusicLibraryRequest<Album>` / `<Song>` / `<Playlist>` for library browsing
-- `MusicCatalogSearchRequest` for search
-- `MusicDataRequest` to `/v1/me/recent/played` for recently played
-- Requires macOS 14+ (already our target)
+### 1. MusicKit entitlement & signing (Apple Developer Program)
+- [ ] Enable the **MusicKit** App Service for bundle id `com.sonobar.app` at developer.apple.com.
+- [ ] Sign the app with a real Development team/profile that includes MusicKit (the project currently
+      uses ad-hoc `CODE_SIGN_IDENTITY = "-"`; MusicKit needs a real signed identity at runtime).
+- [x] `NSAppleMusicUsageDescription` added to `SonoBar/Info.plist`.
+- Note: no special key is required in `SonoBar.entitlements` for user-library MusicKit access — the
+  capability lives on the App ID + provisioning profile.
 
-### 3. Sonos URI Construction
-- Song: `x-sonos-http:song%3a{ID}.mp4?sid=204&flags=8224&sn={SN}`
-- Album: `x-rincon-cpcontainer:1004206calbum%3a{ID}`
-- Playlist: `x-rincon-cpcontainer:1006206cplaylist%3a{ID}`
-- DIDL metadata with `SA_RINCON52231_X_#Svc52231-0-Token` descriptor
-
-### 4. UI
-- Apple Music tab alongside Audible in browse view
-- Search, library, playlists, recently played sections
-- Album/playlist detail views with track lists
-
-## Key References
-- SoCo Python library (github.com/SoCo/SoCo) — full Apple Music URI/DIDL support
-- node-sonos-http-api `appleDef.js` — URI construction reference
-- MusicKit docs: developer.apple.com/documentation/musickit
-
-## Notes
-- MusicKit IDs (`Song.id`, `Album.id`) map directly to Sonos URI IDs
-- Library-only items may use `l.`-prefixed IDs — needs testing
-- No manual auth/token management needed — OS handles it all
-- Cannot test MusicKit in Simulator, requires real Mac
+### 2. Manual QA on a real Mac + speaker
+- [ ] First launch with a Sonos Apple Music favorite present → macOS prompts for Apple Music access.
+- [ ] Deny → "Allow Apple Music access in System Settings"; grant + relaunch → browsing appears.
+- [ ] Search returns tracks/albums/artists; tapping a track queues it (verify in the Sonos app).
+- [ ] Playlists tab lists your library playlists; "Add all to queue" works (server-side, one call).
+- [ ] Library tab lists saved albums AND songs; album "Add all" works; a library-only song is disabled.
+- [ ] No Sonos favorite → "Favorite one Apple Music track…" empty state.
+- [ ] Append failure → error banner is visible and credentials re-discover on next launch.
+- [ ] Edge cases to watch (see spike note "Known follow-ups"): a user-uploaded library album with no
+      catalog counterpart; playlists containing music videos (videos are filtered out).
