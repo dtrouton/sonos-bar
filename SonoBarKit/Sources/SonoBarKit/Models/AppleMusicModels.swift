@@ -1,7 +1,7 @@
 // AppleMusicModels.swift
 // SonoBarKit
 //
-// Value types for Apple Music content surfaced via the iTunes Search API
+// Value types for Apple Music content surfaced via MusicKit
 // and credentials extracted from Sonos favorites.
 
 import Foundation

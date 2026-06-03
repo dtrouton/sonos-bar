@@ -28,15 +28,31 @@ struct AppleMusicSearchView: View {
     @State private var libraryTask: Task<Void, Never>?
 
     var body: some View {
-        if appState.appleMusicCredentials == nil {
-            emptyState
-        } else if appState.appleMusicAuthStatus == .denied {
-            authDeniedState
-        } else {
-            content
-                .sheet(item: $selectedAlbum) { a in AppleMusicAlbumDetailView(album: a) }
-                .sheet(item: $selectedArtist) { a in AppleMusicArtistDetailView(artist: a) }
-                .sheet(item: $selectedPlaylist) { p in AppleMusicPlaylistDetailView(playlist: p) }
+        VStack(spacing: 0) {
+            if let error = appState.appleMusicError {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 11))
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange)
+                        .lineLimit(2)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            if appState.appleMusicCredentials == nil {
+                emptyState
+            } else if appState.appleMusicAuthStatus == .denied {
+                authDeniedState
+            } else {
+                content
+                    .sheet(item: $selectedAlbum) { a in AppleMusicAlbumDetailView(album: a) }
+                    .sheet(item: $selectedArtist) { a in AppleMusicArtistDetailView(artist: a) }
+                    .sheet(item: $selectedPlaylist) { p in AppleMusicPlaylistDetailView(playlist: p) }
+            }
         }
     }
 
@@ -73,7 +89,6 @@ struct AppleMusicSearchView: View {
             switch mode {
             case .search:
                 searchBar
-                errorBanner
                 resultsBody
             case .playlists:
                 playlistsBody
@@ -110,24 +125,6 @@ struct AppleMusicSearchView: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(8)
         .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
-    }
-
-    @ViewBuilder
-    private var errorBanner: some View {
-        if let error = appState.appleMusicError {
-            HStack(spacing: 4) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange)
-                    .font(.system(size: 11))
-                Text(error)
-                    .font(.system(size: 11))
-                    .foregroundColor(.orange)
-                    .lineLimit(2)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 4)
-        }
     }
 
     @ViewBuilder

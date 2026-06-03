@@ -79,7 +79,7 @@ public final class MusicKitDiscoveryProvider: MusicDiscoveryProviding, @unchecke
             request.filter(matching: \.id, equalTo: MusicItemID(playlistId))
             guard let playlist = try await request.response().items.first else { return [] }
             let detailed = try await playlist.with([.tracks])
-            return (detailed.tracks ?? []).map(Self.track(from:))
+            return (detailed.tracks ?? []).compactMap(Self.track(from:))
         } catch { throw AppleMusicError.networkError }
     }
 
@@ -88,7 +88,7 @@ public final class MusicKitDiscoveryProvider: MusicDiscoveryProviding, @unchecke
             let request = MusicCatalogResourceRequest<Album>(matching: \.id, equalTo: MusicItemID(albumId))
             guard let album = try await request.response().items.first else { return [] }
             let detailed = try await album.with([.tracks])
-            return (detailed.tracks ?? []).map(Self.track(from:))
+            return (detailed.tracks ?? []).compactMap(Self.track(from:))
         } catch { throw AppleMusicError.networkError }
     }
 
@@ -116,19 +116,11 @@ public final class MusicKitDiscoveryProvider: MusicDiscoveryProviding, @unchecke
         )
     }
 
-    private static func track(from track: Track) -> AppleMusicTrack {
+    private static func track(from track: Track) -> AppleMusicTrack? {
         switch track {
         case .song(let s): return self.track(from: s)
-        case .musicVideo(let v):
-            // MusicVideo has no PlayParameters/catalog id
-            return AppleMusicTrack(id: v.id.rawValue, title: v.title, artist: v.artistName,
-                                   album: v.albumTitle, albumId: nil,
-                                   artworkURL: v.artwork?.url(width: 600, height: 600),
-                                   durationSec: v.duration.map { Int($0) })
-        @unknown default:
-            assertionFailure("Unknown MusicKit Track case")
-            return AppleMusicTrack(id: "", title: "", artist: nil, album: nil,
-                                   albumId: nil, artworkURL: nil, durationSec: nil)
+        case .musicVideo: return nil        // not playable on Sonos via the song URI path
+        @unknown default: return nil
         }
     }
 
