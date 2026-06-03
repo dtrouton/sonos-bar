@@ -89,6 +89,19 @@ struct AppleMusicModelsTests {
         #expect(AppleMusicPlayable.track(track).artworkURL == nil)
     }
 
+    @Test("Playable.playlist forwards id/title/artworkURL from the wrapped Playlist")
+    func playablePlaylistForwards() {
+        let artwork = URL(string: "https://example.com/p.jpg")
+        let playlist = AppleMusicPlaylist(
+            id: "p.gek1Rvzfo14X1", name: "Christmas", curatorName: nil,
+            artworkURL: artwork, trackCount: 83, isLibrary: true
+        )
+        let p = AppleMusicPlayable.playlist(playlist)
+        #expect(p.id == "p.gek1Rvzfo14X1")
+        #expect(p.title == "Christmas")
+        #expect(p.artworkURL == artwork)
+    }
+
     @Test("Playlist has expected properties")
     func playlistShape() {
         let p = AppleMusicPlaylist(

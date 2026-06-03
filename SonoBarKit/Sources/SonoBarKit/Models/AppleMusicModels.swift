@@ -68,11 +68,13 @@ public struct AppleMusicSearchResults: Sendable, Equatable {
 public enum AppleMusicPlayable: Sendable, Equatable {
     case track(AppleMusicTrack)
     case album(AppleMusicAlbum)
+    case playlist(AppleMusicPlaylist)
 
     public var id: String {
         switch self {
         case .track(let t): return t.id
         case .album(let a): return a.id
+        case .playlist(let p): return p.id
         }
     }
 
@@ -80,6 +82,7 @@ public enum AppleMusicPlayable: Sendable, Equatable {
         switch self {
         case .track(let t): return t.title
         case .album(let a): return a.title
+        case .playlist(let p): return p.name
         }
     }
 
@@ -87,6 +90,7 @@ public enum AppleMusicPlayable: Sendable, Equatable {
         switch self {
         case .track(let t): return t.artworkURL
         case .album(let a): return a.artworkURL
+        case .playlist(let p): return p.artworkURL
         }
     }
 }

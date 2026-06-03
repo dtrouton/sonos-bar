@@ -20,6 +20,14 @@ public enum AppleMusicURIs {
         "x-rincon-cpcontainer:1004206calbum%3a\(id)"
     }
 
+    /// Container URI for an Apple Music playlist.
+    /// Verified on a live speaker 2026-06-03 (library form; NumTracksAdded=83).
+    public static func playlistContainerURI(id: String, isLibrary: Bool) -> String {
+        isLibrary
+            ? "x-rincon-cpcontainer:1006206clibraryplaylist%3a\(id)"
+            : "x-rincon-cpcontainer:1006206cplaylist%3a\(id)"
+    }
+
     public static func didl(for item: AppleMusicPlayable,
                             credentials: AppleMusicCredentials) -> String {
         let title = xmlEscape(item.title)
@@ -48,6 +56,7 @@ public enum AppleMusicURIs {
         switch item {
         case .track: return "object.item.audioItem.musicTrack"
         case .album: return "object.container.album.musicAlbum"
+        case .playlist: return "object.container.playlistContainer"
         }
     }
 
@@ -55,6 +64,9 @@ public enum AppleMusicURIs {
         switch item {
         case .track(let t): return "10032028song%3a\(t.id)"
         case .album(let a): return "1004206calbum%3a\(a.id)"
+        case .playlist(let p):
+            // library form verified on speaker 2026-06-03; catalog form mirrors playlistContainerURI (unreachable in V1, kept for symmetry)
+            return p.isLibrary ? "1006206clibraryplaylist%3a\(p.id)" : "1006206cplaylist%3a\(p.id)"
         }
     }
 
@@ -62,6 +74,7 @@ public enum AppleMusicURIs {
         switch item {
         case .track: return "00020000song:"
         case .album: return "00020000album:"
+        case .playlist: return "00020000playlist:"
         }
     }
 

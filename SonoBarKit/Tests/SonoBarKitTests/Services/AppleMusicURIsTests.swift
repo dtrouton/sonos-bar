@@ -67,4 +67,37 @@ struct AppleMusicURIsTests {
         #expect(b.contains("bbbbbbbb"))
         #expect(a != b)
     }
+
+    @Test("Library playlist container URI matches spike-verified format")
+    func playlistURILibrary() {
+        #expect(AppleMusicURIs.playlistContainerURI(id: "p.gek1Rvzfo14X1", isLibrary: true) ==
+                "x-rincon-cpcontainer:1006206clibraryplaylist%3ap.gek1Rvzfo14X1")
+    }
+
+    @Test("Catalog playlist container URI uses cplaylist prefix")
+    func playlistURICatalog() {
+        #expect(AppleMusicURIs.playlistContainerURI(id: "pl.abc123", isLibrary: false) ==
+                "x-rincon-cpcontainer:1006206cplaylist%3apl.abc123")
+    }
+
+    @Test("DIDL for library playlist uses container class, account token, and library item id")
+    func didlPlaylistLibrary() {
+        let p = AppleMusicPlaylist(id: "p.gek1Rvzfo14X1", name: "Christmas", curatorName: nil,
+                                   artworkURL: nil, trackCount: 83, isLibrary: true)
+        let didl = AppleMusicURIs.didl(for: .playlist(p), credentials: creds)
+        #expect(didl.contains("object.container.playlistContainer"))
+        #expect(didl.contains("SA_RINCON52231_X_#Svc52231-890cb54f-Token"))
+        #expect(didl.contains("1006206clibraryplaylist%3ap.gek1Rvzfo14X1"))
+        #expect(didl.contains("<dc:title>Christmas</dc:title>"))
+        #expect(didl.contains("parentID=\"00020000playlist:\""))
+    }
+
+    @Test("DIDL for catalog playlist uses cplaylist item id")
+    func didlPlaylistCatalog() {
+        let p = AppleMusicPlaylist(id: "pl.abc123", name: "Hits", curatorName: nil,
+                                   artworkURL: nil, trackCount: 10, isLibrary: false)
+        let didl = AppleMusicURIs.didl(for: .playlist(p), credentials: creds)
+        #expect(didl.contains("1006206cplaylist%3apl.abc123"))
+        #expect(didl.contains("object.container.playlistContainer"))
+    }
 }
