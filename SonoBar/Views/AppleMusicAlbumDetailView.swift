@@ -101,12 +101,12 @@ struct AppleMusicAlbumDetailView: View {
     }
 
     private func load() async {
-        guard let client = appState.itunesSearchClient, !isLoading else { return }
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            tracks = try await client.albumTracks(albumId: album.id)
+            tracks = try await appState.musicDiscovery.albumTracks(albumId: album.id)
         } catch {
             errorMessage = "Couldn't load album. Try again."
         }

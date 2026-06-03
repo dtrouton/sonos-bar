@@ -78,12 +78,12 @@ struct AppleMusicArtistDetailView: View {
     }
 
     private func load() async {
-        guard let client = appState.itunesSearchClient, !isLoading else { return }
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            tracks = try await client.artistTopTracks(artistId: artist.id)
+            tracks = try await appState.musicDiscovery.artistTopTracks(artistId: artist.id)
         } catch {
             errorMessage = "Couldn't load artist. Try again."
         }

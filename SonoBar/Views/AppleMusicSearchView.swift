@@ -1,6 +1,11 @@
 import SwiftUI
 import SonoBarKit
 
+private enum AMMode: String, CaseIterable, Identifiable {
+    case search = "Search", playlists = "Playlists", library = "Library"
+    var id: String { rawValue }
+}
+
 struct AppleMusicSearchView: View {
     @Environment(AppState.self) private var appState
 
@@ -11,14 +16,27 @@ struct AppleMusicSearchView: View {
     @State private var activeTask: Task<Void, Never>?
     @State private var selectedAlbum: AppleMusicAlbum?
     @State private var selectedArtist: AppleMusicArtist?
+    @State private var selectedPlaylist: AppleMusicPlaylist?
+
+    @State private var mode: AMMode = .search
+
+    @State private var libraryPlaylists: [AppleMusicPlaylist] = []
+    @State private var libraryAlbums: [AppleMusicAlbum] = []
+    @State private var librarySongs: [AppleMusicTrack] = []
+    @State private var libraryError: String?
+    @State private var libraryDidLoad = false
+    @State private var libraryTask: Task<Void, Never>?
 
     var body: some View {
         if appState.appleMusicCredentials == nil {
             emptyState
+        } else if appState.appleMusicAuthStatus == .denied {
+            authDeniedState
         } else {
             content
                 .sheet(item: $selectedAlbum) { a in AppleMusicAlbumDetailView(album: a) }
                 .sheet(item: $selectedArtist) { a in AppleMusicArtistDetailView(artist: a) }
+                .sheet(item: $selectedPlaylist) { p in AppleMusicPlaylistDetailView(playlist: p) }
         }
     }
 
@@ -34,12 +52,39 @@ struct AppleMusicSearchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var authDeniedState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lock.fill").font(.system(size: 32)).foregroundColor(.secondary)
+            Text("Allow Apple Music access in System Settings to browse your library.")
+                .font(.system(size: 12)).foregroundColor(.secondary)
+                .multilineTextAlignment(.center).padding(.horizontal, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var content: some View {
         VStack(spacing: 0) {
-            searchBar
-            errorBanner
-            resultsBody
+            Picker("", selection: $mode) {
+                ForEach(AMMode.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 12).padding(.bottom, 6)
+
+            switch mode {
+            case .search:
+                searchBar
+                errorBanner
+                resultsBody
+            case .playlists:
+                playlistsBody
+            case .library:
+                libraryBody
+            }
         }
+        .task(id: mode) {
+            if mode != .search && !libraryDidLoad { reloadLibrary() }
+        }
+        .onDisappear { libraryTask?.cancel() }
     }
 
     private var searchBar: some View {
@@ -116,6 +161,59 @@ struct AppleMusicSearchView: View {
         }
     }
 
+    @ViewBuilder
+    private var playlistsBody: some View {
+        if let error = libraryError {
+            libraryErrorView(error)
+        } else if !libraryDidLoad {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if libraryPlaylists.isEmpty {
+            Text("No playlists in your library.")
+                .font(.system(size: 12)).foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    playlistsSection(libraryPlaylists)
+                }
+                .padding(.horizontal, 12).padding(.bottom, 12)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var libraryBody: some View {
+        if let error = libraryError {
+            libraryErrorView(error)
+        } else if !libraryDidLoad {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if libraryAlbums.isEmpty && librarySongs.isEmpty {
+            Text("No albums or songs in your library.")
+                .font(.system(size: 12)).foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    if !libraryAlbums.isEmpty { albumsSection(libraryAlbums) }
+                    if !librarySongs.isEmpty  { librarySongsSection(librarySongs) }
+                }
+                .padding(.horizontal, 12).padding(.bottom, 12)
+            }
+        }
+    }
+
+    private func libraryErrorView(_ error: String) -> some View {
+        VStack(spacing: 8) {
+            Text(error).font(.system(size: 11)).foregroundColor(.secondary)
+            Button("Retry") {
+                libraryError = nil
+                libraryDidLoad = false
+                reloadLibrary()
+            }.buttonStyle(.plain).font(.system(size: 11))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private func tracksSection(_ tracks: [AppleMusicTrack]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Tracks").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
@@ -131,9 +229,9 @@ struct AppleMusicSearchView: View {
         }
     }
 
-    private func albumsSection(_ albums: [AppleMusicAlbum]) -> some View {
+    private func albumsSection(_ albums: [AppleMusicAlbum], title: String = "Albums") -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Albums").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+            Text(title).font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
             VStack(spacing: 0) {
                 ForEach(albums) { album in
                     Button { selectedAlbum = album } label: {
@@ -152,6 +250,34 @@ struct AppleMusicSearchView: View {
                     Button { selectedArtist = artist } label: {
                         rowContent(artwork: nil, title: artist.name, subtitle: nil)
                     }.buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func playlistsSection(_ playlists: [AppleMusicPlaylist]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Playlists").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+            VStack(spacing: 0) {
+                ForEach(playlists) { playlist in
+                    Button { selectedPlaylist = playlist } label: {
+                        rowContent(artwork: playlist.artworkURL, title: playlist.name, subtitle: nil)
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func librarySongsSection(_ songs: [AppleMusicTrack]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Songs").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+            VStack(spacing: 0) {
+                ForEach(songs) { song in
+                    Button { Task { await appState.appendAppleMusicTrack(song) } } label: {
+                        rowContent(artwork: song.artworkURL, title: song.title, subtitle: song.artist)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(Int(song.id) == nil)
                 }
             }
         }
@@ -186,7 +312,7 @@ struct AppleMusicSearchView: View {
     private func scheduleSearch(_ newQuery: String) {
         activeTask?.cancel()
         errorMessage = nil
-        guard !newQuery.isEmpty, let client = appState.itunesSearchClient else {
+        guard !newQuery.isEmpty else {
             results = nil
             return
         }
@@ -196,7 +322,7 @@ struct AppleMusicSearchView: View {
             isSearching = true
             defer { isSearching = false }
             do {
-                let r = try await client.search(newQuery)
+                let r = try await appState.musicDiscovery.search(newQuery)
                 guard !Task.isCancelled else { return }
                 results = r
             } catch {
@@ -205,5 +331,28 @@ struct AppleMusicSearchView: View {
                 errorMessage = "Search failed. Try again."
             }
         }
+    }
+
+    private func loadLibrary() async {
+        do {
+            async let p = appState.musicDiscovery.libraryPlaylists()
+            async let a = appState.musicDiscovery.libraryAlbums()
+            async let s = appState.musicDiscovery.librarySongs()
+            let (pl, al, so) = try await (p, a, s)
+            guard !Task.isCancelled else { return }
+            libraryPlaylists = pl
+            libraryAlbums = al
+            librarySongs = so
+            libraryError = nil
+        } catch {
+            guard !Task.isCancelled else { return }   // ignore cancellation (provider wraps it as networkError)
+            libraryError = "Couldn't load your library. Retry."
+        }
+        libraryDidLoad = true
+    }
+
+    private func reloadLibrary() {
+        libraryTask?.cancel()
+        libraryTask = Task { await loadLibrary() }
     }
 }
