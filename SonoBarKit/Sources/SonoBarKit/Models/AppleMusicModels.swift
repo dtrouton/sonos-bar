@@ -91,6 +91,25 @@ public enum AppleMusicPlayable: Sendable, Equatable {
     }
 }
 
+public struct AppleMusicPlaylist: Sendable, Identifiable, Equatable {
+    public let id: String           // catalog "pl.xxx" or library "p.xxx"
+    public let name: String
+    public let curatorName: String?
+    public let artworkURL: URL?
+    public let trackCount: Int?
+    public let isLibrary: Bool
+
+    public init(id: String, name: String, curatorName: String?,
+                artworkURL: URL?, trackCount: Int?, isLibrary: Bool) {
+        self.id = id
+        self.name = name
+        self.curatorName = curatorName
+        self.artworkURL = artworkURL
+        self.trackCount = trackCount
+        self.isLibrary = isLibrary
+    }
+}
+
 /// Playback credentials extracted from a Sonos favorite. The sn and accountToken values
 /// come from the speaker's live state — we do NOT construct them, because the
 /// ListAvailableServices sn and the node-sonos-http-api "-0-" token are both wrong for

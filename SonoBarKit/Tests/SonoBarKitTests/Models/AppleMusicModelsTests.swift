@@ -88,4 +88,21 @@ struct AppleMusicModelsTests {
         )
         #expect(AppleMusicPlayable.track(track).artworkURL == nil)
     }
+
+    @Test("Playlist has expected properties")
+    func playlistShape() {
+        let p = AppleMusicPlaylist(
+            id: "p.gek1Rvzfo14X1",
+            name: "Christmas (minus Wham!)",
+            curatorName: nil,
+            artworkURL: nil,
+            trackCount: 42,
+            isLibrary: true
+        )
+        #expect(p.id == "p.gek1Rvzfo14X1")
+        #expect(p.name == "Christmas (minus Wham!)")
+        #expect(p.curatorName == nil)
+        #expect(p.isLibrary)
+        #expect(p.trackCount == 42)
+    }
 }
