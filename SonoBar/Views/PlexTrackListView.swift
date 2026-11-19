@@ -51,51 +51,28 @@ struct PlexTrackListView: View {
                         .padding(.top, 8)
                         .padding(.bottom, 8)
 
-                        // Play All / Resume buttons
                         HStack(spacing: 8) {
-                            Button {
-                                Task {
-                                    await appState.playPlexAlbum(albumId: album.id)
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "play.fill")
-                                        .font(.system(size: 10))
-                                    Text("Play All")
-                                        .font(.system(size: 11))
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.accentColor.opacity(0.15))
-                                .cornerRadius(14)
+                            Button("Play Now") {
+                                Task { await appState.queuePlexTracks(tracks, action: .playNow()) }
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.borderedProminent)
 
                             if let resumeIdx = resumeTrackIndex {
                                 let track = tracks[resumeIdx]
-                                Button {
+                                Button("Resume") {
                                     Task {
-                                        await appState.playPlexAlbum(
-                                            albumId: album.id,
-                                            startTrackIndex: resumeIdx,
-                                            seekOffset: track.viewOffset / 1000
+                                        await appState.queuePlexTracks(
+                                            tracks,
+                                            action: .playNow(startIndex: resumeIdx, offsetSeconds: track.viewOffset / 1000)
                                         )
                                     }
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "arrow.counterclockwise")
-                                            .font(.system(size: 10))
-                                        Text("Resume")
-                                            .font(.system(size: 11))
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(Color.secondary.opacity(0.15))
-                                    .cornerRadius(14)
                                 }
-                                .buttonStyle(.plain)
                             }
+
+                            Menu("Queue") { queueOptions(for: tracks) }
                         }
+                        .controlSize(.small)
+                        .disabled(appState.isUpdatingPlexQueue)
                         .padding(.bottom, 8)
 
                         // Track list
@@ -103,21 +80,32 @@ struct PlexTrackListView: View {
                             ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
                                 Button {
                                     Task {
-                                        await appState.playPlexAlbum(
-                                            albumId: album.id,
-                                            startTrackIndex: index
-                                        )
+                                        await appState.queuePlexTracks(tracks, action: .playNow(startIndex: index))
                                     }
                                 } label: {
                                     trackRow(track: track)
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(appState.isUpdatingPlexQueue)
+                                .contextMenu { queueOptions(for: [track]) }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func queueOptions(for tracks: [PlexTrack]) -> some View {
+        Button("Play Next") {
+            Task { await appState.queuePlexTracks(tracks, action: .playNext) }
+        }
+        .disabled(appState.isUpdatingPlexQueue)
+        Button("Add to Queue") {
+            Task { await appState.queuePlexTracks(tracks, action: .addToQueue) }
+        }
+        .disabled(appState.isUpdatingPlexQueue)
     }
 
     // MARK: - Track Row

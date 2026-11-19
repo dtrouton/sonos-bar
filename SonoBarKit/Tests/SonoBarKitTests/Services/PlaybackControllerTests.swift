@@ -79,6 +79,49 @@ struct PlaybackControllerTests {
         let body = mock.lastBodyString ?? ""
         #expect(body.contains("AddURIToQueue"))
         #expect(body.contains("http://plex/file.mp3"))
+        #expect(body.contains("<DesiredFirstTrackNumberEnqueued>0</DesiredFirstTrackNumberEnqueued>"))
+        #expect(body.contains("<EnqueueAsNext>0</EnqueueAsNext>"))
+    }
+
+    @Test func testPlayNextInsertsAtRequestedPosition() async throws {
+        let mock = CapturingHTTPClient()
+        mock.responseData = makeEmptyResponse(action: "AddURIToQueue", service: .avTransport)
+        let controller = PlaybackController(client: SOAPClient(host: "192.168.1.10", httpClient: mock))
+
+        try await controller.addToQueue(uri: "http://plex/file.mp3", metadata: "", position: 4, enqueueAsNext: true)
+
+        let body = try #require(mock.lastBodyString)
+        #expect(body.contains("<DesiredFirstTrackNumberEnqueued>4</DesiredFirstTrackNumberEnqueued>"))
+        #expect(body.contains("<EnqueueAsNext>1</EnqueueAsNext>"))
+    }
+
+    @Test(arguments: [true, false])
+    func testPlayQueuedTrackSeeksBeforePlaying(queueAlreadySelected: Bool) async throws {
+        let queueURI = "x-rincon-queue:RINCON_TEST#0"
+        let currentURI = queueAlreadySelected ? queueURI : "x-sonos-htastream:RINCON_TEST:spdif"
+        let mock = CapturingHTTPClient()
+        mock.responseData = Data("""
+        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+          <s:Body>
+            <u:GetMediaInfoResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+              <CurrentURI>\(currentURI)</CurrentURI>
+            </u:GetMediaInfoResponse>
+          </s:Body>
+        </s:Envelope>
+        """.utf8)
+        let controller = PlaybackController(client: SOAPClient(host: "192.168.1.10", httpClient: mock))
+
+        try await controller.playQueuedTrack(7, queueURI: queueURI)
+
+        let actions = mock.requests.compactMap { $0.value(forHTTPHeaderField: "SOAPACTION") }
+        let expected = queueAlreadySelected
+            ? ["GetMediaInfo", "Seek", "Play"]
+            : ["GetMediaInfo", "SetAVTransportURI", "Seek", "Play"]
+        #expect(actions == expected.map { "\"urn:schemas-upnp-org:service:AVTransport:1#\($0)\"" })
+        let seekRequest = try #require(mock.requests.dropLast().last)
+        let seekBody = String(decoding: try #require(seekRequest.httpBody), as: UTF8.self)
+        #expect(seekBody.contains("<Unit>TRACK_NR</Unit>"))
+        #expect(seekBody.contains("<Target>7</Target>"))
     }
 
     @Test func testGetTransportStateParsesResponse() async throws {

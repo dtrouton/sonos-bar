@@ -4,11 +4,13 @@ import Testing
 /// Mock HTTP client that captures requests for test assertion.
 final class CapturingHTTPClient: HTTPClientProtocol, @unchecked Sendable {
     var lastRequest: URLRequest?
+    private(set) var requests: [URLRequest] = []
     var responseData: Data = Data()
     var responseStatusCode: Int = 200
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         lastRequest = request
+        requests.append(request)
         let url = request.url ?? URL(string: "http://localhost")!
         let response = HTTPURLResponse(
             url: url,

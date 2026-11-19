@@ -142,6 +142,19 @@ struct PlexBrowseView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
+                } else if appState.isUpdatingPlexQueue {
+                    ProgressView("Updating the Sonos queue…")
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                } else if let message = appState.plexQueueMessage {
+                    Label(message, systemImage: "checkmark")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
                 }
 
                 if !navigationPath.isEmpty && !isSearching {
@@ -268,6 +281,7 @@ struct PlexBrowseView: View {
                                         onDeckRow(track: track)
                                     }
                                     .buttonStyle(.plain)
+                                    .disabled(appState.isUpdatingPlexQueue)
                                 }
                             }
                         }

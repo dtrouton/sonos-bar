@@ -124,18 +124,32 @@ struct NowPlayingView: View {
             .buttonStyle(.plain)
 
             if showQueue {
-                // Queue list
-                QueueListView(
-                    items: appState.contentItems,
-                    currentTrackURI: appState.playbackState.currentTrack?.uri,
-                    onTap: { item in
-                        guard let idx = appState.contentItems.firstIndex(where: { $0.id == item.id }) else { return }
-                        Task {
-                            try? await appState.activeController?.seekToTrack(idx + 1)
-                            await appState.refreshPlayback()
-                        }
+                if appState.isBrowseLoading {
+                    ProgressView("Loading queue…")
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, minHeight: 100)
+                } else if let error = appState.contentError {
+                    VStack(spacing: 6) {
+                        Text(error).multilineTextAlignment(.center)
+                        Button("Retry") { Task { await appState.browseQueue() } }
                     }
-                )
+                    .font(.system(size: 11))
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, minHeight: 100)
+                } else {
+                    QueueListView(
+                        items: appState.contentItems,
+                        currentTrackURI: appState.playbackState.currentTrack?.uri,
+                        onTap: { item in
+                            guard let idx = appState.contentItems.firstIndex(where: { $0.id == item.id }),
+                                  let controller = appState.activeController else { return }
+                            Task {
+                                try? await controller.seekToTrack(idx + 1)
+                                await appState.refreshPlayback()
+                            }
+                        }
+                    )
+                }
             } else {
                 // Album art
                 Group {
@@ -285,19 +299,24 @@ struct NowPlayingView: View {
                 volume: $sliderVolume,
                 isMuted: $sliderMuted,
                 onVolumeChange: { level in
+                    guard let controller = appState.activeRoomController else { return }
                     Task {
-                        try? await appState.activeController?.setVolume(level)
+                        try? await controller.setVolume(level)
                         await appState.refreshPlayback()
                     }
                 },
                 onMuteToggle: {
+                    guard let controller = appState.activeRoomController else { return }
                     sliderMuted.toggle()
+                    let muted = sliderMuted
                     Task {
-                        try? await appState.activeController?.setMute(sliderMuted)
+                        try? await controller.setMute(muted)
                         await appState.refreshPlayback()
                     }
                 }
             )
+            .disabled(appState.activeRoomController == nil)
+            .help("Volume for \(roomName)")
             .padding(.bottom, 8)
         }
         .onAppear {

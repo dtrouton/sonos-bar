@@ -24,6 +24,7 @@ struct BrowseView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            roomPicker
             // Segment picker
             Picker("", selection: $segment) {
                 ForEach(BrowseSegment.allCases, id: \.self) { seg in
@@ -33,7 +34,7 @@ struct BrowseView: View {
             .pickerStyle(.segmented)
             .controlSize(.mini)
             .padding(.horizontal, 12)
-            .padding(.top, 10)
+            .padding(.top, 6)
             .padding(.bottom, 4)
 
             switch segment {
@@ -47,6 +48,47 @@ struct BrowseView: View {
                 AppleMusicSearchView()
             }
         }
+    }
+
+    private var roomPicker: some View {
+        let activeRoom = appState.deviceManager.activeDevice
+        let rooms = appState.deviceManager.devices
+        let isGrouped = activeRoom.flatMap { appState.deviceManager.group(for: $0.uuid) }?.isStandalone == false
+        return HStack(spacing: 6) {
+            Text("Play in")
+                .foregroundStyle(.secondary)
+            Menu {
+                ForEach(rooms) { room in
+                    Button {
+                        appState.selectRoom(uuid: room.uuid)
+                    } label: {
+                        if room.uuid == activeRoom?.uuid {
+                            Label(room.roomName, systemImage: "checkmark")
+                        } else {
+                            Text(room.roomName)
+                        }
+                    }
+                }
+            } label: {
+                Text(activeRoom?.roomName ?? (rooms.isEmpty ? "No Sonos rooms" : "Choose a room"))
+                    .lineLimit(1)
+            }
+            .disabled(rooms.isEmpty)
+            .controlSize(.small)
+            .accessibilityLabel("Playback room")
+            .accessibilityValue(activeRoom?.roomName ?? "No room selected")
+
+            if isGrouped {
+                Image(systemName: "speaker.2")
+                    .foregroundStyle(.secondary)
+                    .help("Playback goes to this room's Sonos group.")
+                    .accessibilityLabel("Grouped playback")
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 11))
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
     }
 
     // MARK: - Recents Content

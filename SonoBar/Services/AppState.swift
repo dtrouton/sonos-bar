@@ -24,6 +24,7 @@ final class AppState {
     private let ssdp = SSDPDiscovery()
     private let settings = SettingsStore()
     private var eventListener: UPnPEventListener?
+    private var eventSpeakerIP: String?
     private var subscriptionIDs: [SonosService: String] = [:]
     private var isDiscovering = false
 
@@ -31,6 +32,9 @@ final class AppState {
     var albumArtImage: NSImage? = nil
     var isLoading = true
     private(set) var activeController: PlaybackController?
+    private(set) var activeRoomController: PlaybackController?
+    private var refreshingController: PlaybackController?
+    private var playbackRefreshPending = false
     private let artworkCache = ArtworkCache.shared
     /// Playback summary keyed by device UUID, populated for all rooms.
     var roomStates: [String: RoomSummary] = [:]
@@ -79,7 +83,9 @@ final class AppState {
         initAudibleIfConfigured()
         await refreshPlayback()
         await refreshAllRooms()
-        await startEventListener()
+        if let controller = activeController {
+            await startEventListener(for: controller)
+        }
 
         mediaKeyController.onPlayPause = { [weak self] in
             guard let self else { return }
@@ -114,15 +120,35 @@ final class AppState {
     }
 
     func refreshPlayback() async {
-        guard let controller = activeController else { return }
-        let transportState = (try? await controller.getTransportState()) ?? .stopped
-        let currentTrack = try? await controller.getPositionInfo()
-        let volume = (try? await controller.getVolume()) ?? 0
-        let isMuted = (try? await controller.getMute()) ?? false
+        guard let controller = activeController, let roomController = activeRoomController else { return }
+        if refreshingController === controller {
+            playbackRefreshPending = true
+            return
+        }
+        refreshingController = controller
+        defer {
+            if refreshingController === controller { refreshingController = nil }
+        }
+        repeat {
+            playbackRefreshPending = false
+            await refreshPlayback(controller: controller, roomController: roomController)
+        } while activeController === controller && playbackRefreshPending
+    }
+
+    private func refreshPlayback(controller: PlaybackController, roomController: PlaybackController) async {
+        async let transportRequest = try? controller.getTransportState()
+        async let trackRequest = try? controller.getPositionInfo()
+        async let volumeRequest = try? roomController.getVolume()
+        async let muteRequest = try? roomController.getMute()
+        let (transport, currentTrack, roomVolume, roomMuted) = await (
+            transportRequest, trackRequest, volumeRequest, muteRequest
+        )
+        guard activeController === controller else { return }
+        let transportState = transport ?? .stopped
         playbackState = PlaybackState(
             transportState: transportState,
-            volume: volume,
-            isMuted: isMuted,
+            volume: roomVolume ?? playbackState.volume,
+            isMuted: roomMuted ?? playbackState.isMuted,
             currentTrack: currentTrack
         )
         mediaKeyController.updateNowPlaying(
@@ -130,7 +156,8 @@ final class AppState {
             transportState: transportState
         )
 
-        await loadAlbumArt()
+        await loadAlbumArt(for: controller)
+        guard activeController === controller else { return }
 
         // Track recents: when the media source changes, record it.
         // Check both media URI and track URI — for queue-based playback (Plex, Audible)
@@ -138,6 +165,7 @@ final class AppState {
         let currentTrackURI = currentTrack?.uri
         if transportState == .playing || transportState == .pausedPlayback {
             if let mediaInfo = try? await controller.getMediaInfo(),
+               activeController === controller,
                !mediaInfo.uri.isEmpty,
                (mediaInfo.uri != lastMediaURI || currentTrackURI != lastTrackURI) {
                 lastMediaURI = mediaInfo.uri
@@ -150,6 +178,7 @@ final class AppState {
                 // content URI from EnqueuedTransportURI so we can replay it
                 if !Self.isReplayableURI(mediaInfo.uri) {
                     if let enqueued = try? await controller.getEnqueuedTransportURI(),
+                       activeController === controller,
                        Self.isReplayableURI(enqueued.uri) {
                         recentURI = enqueued.uri
                         recentDIDL = enqueued.metadata
@@ -179,13 +208,29 @@ final class AppState {
     }
 
     func selectRoom(uuid: String) {
+        guard deviceManager.activeDevice?.uuid != uuid,
+              deviceManager.devices.contains(where: { $0.uuid == uuid }) else { return }
+        stopEventListener()
         deviceManager.setActiveDevice(uuid: uuid)
         settings.activeDeviceUUID = uuid
         updateActiveController()
-        stopEventListener()
+        playbackState = PlaybackState(transportState: .stopped, volume: 0, isMuted: false)
+        albumArtImage = nil
+        contentItems = []
+        contentError = nil
+        isBrowseLoading = false
+        sleepTimerRemaining = nil
+        sleepTimerEndDate = nil
+        lastMediaURI = nil
+        lastTrackURI = nil
+        mediaKeyController.updateNowPlaying(track: nil, transportState: .stopped)
+        let controller = activeController
         Task {
-            await refreshPlayback()
-            await startEventListener()
+            guard let controller, activeController === controller else { return }
+            async let playback: Void = refreshPlayback()
+            async let timer: Void = refreshSleepTimer()
+            await startEventListener(for: controller)
+            _ = await (playback, timer)
         }
     }
 
@@ -291,7 +336,7 @@ final class AppState {
         }
     }
 
-    func loadAlbumArt() async {
+    private func loadAlbumArt(for controller: PlaybackController) async {
         guard let albumArtURI = playbackState.currentTrack?.albumArtURI,
               !albumArtURI.isEmpty else {
             albumArtImage = nil
@@ -312,28 +357,23 @@ final class AppState {
             fullURL = "http://\(ip):1400\(albumArtURI)"
         }
 
-        if let cached = artworkCache.get(for: fullURL) {
-            albumArtImage = cached
-            return
-        }
-
-        guard let url = URL(string: fullURL),
-              let (data, _) = try? await URLSession.shared.data(from: url) else {
-            albumArtImage = nil
-            return
-        }
-
-        artworkCache.set(data, for: fullURL)
-        albumArtImage = NSImage(data: data)
+        let image = await artworkCache.image(for: fullURL)
+        guard activeController === controller else { return }
+        albumArtImage = image
     }
 
     private func updateActiveController() {
         guard let device = deviceManager.activeDevice,
               let ip = deviceManager.coordinatorIP(for: device.uuid) else {
             activeController = nil
+            activeRoomController = nil
             return
         }
-        activeController = PlaybackController(client: SOAPClient(host: ip))
+        let controller = PlaybackController(client: SOAPClient(host: ip))
+        activeController = controller
+        activeRoomController = device.ip == ip
+            ? controller
+            : PlaybackController(client: SOAPClient(host: device.ip))
     }
 
     private var activeClient: SOAPClient? {
@@ -389,17 +429,23 @@ final class AppState {
     }
 
     func browseQueue() async {
+        let controller = activeController
         contentError = nil
         contentItems = []
         isBrowseLoading = true
-        defer { isBrowseLoading = false }
+        defer {
+            if activeController === controller { isBrowseLoading = false }
+        }
         guard let client = activeClient else {
             contentError = "No speaker selected"
             return
         }
         do {
-            contentItems = try await ContentBrowser.browseQueue(client: client)
+            let items = try await ContentBrowser.browseQueue(client: client)
+            guard activeController === controller else { return }
+            contentItems = items
         } catch {
+            guard activeController === controller else { return }
             contentError = "Queue: \(error.localizedDescription)"
         }
     }
@@ -480,24 +526,27 @@ final class AppState {
     }
 
     func setSleepTimer(minutes: Int) async {
-        guard let client = activeClient else { return }
-        try? await SleepTimerController.setSleepTimer(client: client, minutes: minutes)
+        guard let client = activeClient, let controller = activeController else { return }
+        guard (try? await SleepTimerController.setSleepTimer(client: client, minutes: minutes)) != nil,
+              activeController === controller else { return }
         // Set end date immediately — don't rely on a second SOAP round-trip
         sleepTimerEndDate = Date.now.addingTimeInterval(TimeInterval(minutes * 60))
         sleepTimerRemaining = String(format: "%02d:%02d:00", minutes / 60, minutes % 60)
     }
 
     func cancelSleepTimer() async {
-        guard let client = activeClient else { return }
-        try? await SleepTimerController.cancelSleepTimer(client: client)
+        guard let client = activeClient, let controller = activeController else { return }
+        guard (try? await SleepTimerController.cancelSleepTimer(client: client)) != nil,
+              activeController === controller else { return }
         sleepTimerRemaining = nil
         sleepTimerEndDate = nil
     }
 
     func refreshSleepTimer() async {
-        guard let client = activeClient else { return }
+        guard let client = activeClient, let controller = activeController else { return }
         do {
             let remaining = try await SleepTimerController.getRemainingTime(client: client)
+            guard activeController === controller else { return }
             sleepTimerRemaining = remaining
             if let remaining {
                 let seconds = parseSleepTime(remaining)
@@ -574,25 +623,36 @@ final class AppState {
 
     // MARK: - UPnP Event Subscriptions
 
-    private func startEventListener() async {
-        guard let device = deviceManager.activeDevice,
+    private func startEventListener(for controller: PlaybackController) async {
+        guard activeController === controller,
+              let device = deviceManager.activeDevice,
               let speakerIP = deviceManager.coordinatorIP(for: device.uuid) else { return }
 
+        stopEventListener()
         let listener = UPnPEventListener()
-        self.eventListener = listener
+        eventListener = listener
+        eventSpeakerIP = speakerIP
 
         do {
-            try await listener.start { [weak self] service, properties in
-                Task { @MainActor [weak self] in
-                    self?.handleEvent(service: service, properties: properties)
+            try await listener.start { [weak self, weak listener] _, _ in
+                Task { @MainActor [weak self, weak listener] in
+                    guard let self, let listener, self.eventListener === listener else { return }
+                    await self.refreshPlayback()
                 }
             }
         } catch {
+            if eventListener === listener { stopEventListener() }
             return
         }
 
-        guard let port = listener.port,
-              let localIP = getLocalIP() else { return }
+        guard eventListener === listener else {
+            listener.stop()
+            return
+        }
+        guard let port = listener.port, let localIP = getLocalIP() else {
+            stopEventListener()
+            return
+        }
 
         let services: [SonosService] = [.avTransport, .renderingControl]
         for service in services {
@@ -605,37 +665,31 @@ final class AppState {
             if let (_, response) = try? await URLSession.shared.data(for: request),
                let httpResponse = response as? HTTPURLResponse,
                let sid = httpResponse.value(forHTTPHeaderField: "SID") {
+                guard eventListener === listener else {
+                    unsubscribe(speakerIP: speakerIP, service: service, sid: sid)
+                    return
+                }
                 subscriptionIDs[service] = sid
             }
+            guard eventListener === listener else { return }
         }
     }
 
-    private func handleEvent(service: SonosService, properties: [String: String]) {
-        Task {
-            await refreshPlayback()
-        }
+    private func unsubscribe(speakerIP: String, service: SonosService, sid: String) {
+        let request = UPnPSubscription.buildUnsubscribeRequest(speakerHost: speakerIP, service: service, sid: sid)
+        Task { _ = try? await URLSession.shared.data(for: request) }
     }
 
     private func stopEventListener() {
-        guard let device = deviceManager.activeDevice,
-              let speakerIP = deviceManager.coordinatorIP(for: device.uuid) else {
-            eventListener?.stop()
-            eventListener = nil
-            subscriptionIDs.removeAll()
-            return
-        }
-
-        for (service, sid) in subscriptionIDs {
-            let request = UPnPSubscription.buildUnsubscribeRequest(
-                speakerHost: speakerIP,
-                service: service,
-                sid: sid
-            )
-            Task { _ = try? await URLSession.shared.data(for: request) }
+        if let speakerIP = eventSpeakerIP {
+            for (service, sid) in subscriptionIDs {
+                unsubscribe(speakerIP: speakerIP, service: service, sid: sid)
+            }
         }
 
         eventListener?.stop()
         eventListener = nil
+        eventSpeakerIP = nil
         subscriptionIDs.removeAll()
     }
 
@@ -671,9 +725,11 @@ final class AppState {
     private(set) var plexOnDeck: [PlexTrack] = []
     private(set) var plexOnDeckError: String?
     var plexError: String?
-    var activePlexTrackId: String?
-    var activePlexAlbumId: String?
-    private var lastPlexReportTime: Date?
+    private(set) var plexQueueMessage: String?
+    private(set) var isUpdatingPlexQueue = false
+    private var plexQueuedTracks: [String: [String: String]] = [:]
+    private var lastPlexReport: (room: String, track: String, state: String, date: Date)?
+    private var isReportingPlexProgress = false
 
     private static let plexHostKey = "plexServerIP"
 
@@ -694,9 +750,9 @@ final class AppState {
         plexOnDeck = []
         plexOnDeckError = nil
         plexError = nil
-        activePlexTrackId = nil
-        activePlexAlbumId = nil
-        lastPlexReportTime = nil
+        plexQueueMessage = nil
+        plexQueuedTracks = [:]
+        lastPlexReport = nil
     }
 
     func initPlexIfConfigured() {
@@ -756,87 +812,103 @@ final class AppState {
 
     // MARK: - Plex Playback
 
-    func playPlexAlbum(albumId: String, startTrackIndex: Int = 0, seekOffset: Int = 0) async {
-        guard let client = plexClient, let controller = activeController,
-              let device = deviceManager.activeDevice,
-              let group = deviceManager.group(for: device.uuid) else { return }
-        do {
-            let tracks = try await client.getTracks(albumId: albumId)
-            guard !tracks.isEmpty else { return }
-
-            try await controller.clearQueue()
-
-            for track in tracks {
-                guard let audioURL = client.audioURL(partKey: track.partKey) else { continue }
-                let metadata = plexDIDL(track: track)
-                try await controller.addToQueue(uri: audioURL.absoluteString, metadata: metadata)
-            }
-
-            // Point the transport at the queue, then seek to the right track
-            let queueURI = "x-rincon-queue:\(group.coordinatorUUID)#0"
-            try await controller.playURI(queueURI, metadata: "")
-            let trackNumber = startTrackIndex + 1
-            try await controller.seekToTrack(trackNumber)
-
-            // If there's a seek offset, wait for PLAYING then seek
-            if seekOffset > 0 {
-                try await waitForPlaying()
-                let h = seekOffset / 3600
-                let m = (seekOffset % 3600) / 60
-                let s = seekOffset % 60
-                let target = String(format: "%d:%02d:%02d", h, m, s)
-                try await controller.seek(to: target)
-            }
-
-            activePlexAlbumId = albumId
-            let playingTrack = tracks[min(startTrackIndex, tracks.count - 1)]
-            activePlexTrackId = playingTrack.id
-
-            // Add to recents directly — we have all the info, don't rely on Sonos roundtrip
-            addPlexRecent(track: playingTrack)
-
-            await refreshPlayback()
-        } catch {
-            plexError = "Playback failed: \(error.localizedDescription)"
-        }
+    enum PlexQueueAction {
+        case playNow(startIndex: Int = 0, offsetSeconds: Int = 0)
+        case playNext
+        case addToQueue
     }
 
     func resumePlexTrack(_ track: PlexTrack) async {
-        await playPlexSingleTrack(track)
+        await queuePlexTracks([track], action: .playNow(offsetSeconds: track.viewOffset / 1000))
     }
 
-    func playPlexSingleTrack(_ track: PlexTrack) async {
-        guard let client = plexClient, let controller = activeController,
+    func queuePlexTracks(_ tracks: [PlexTrack], action: PlexQueueAction) async {
+        guard !isUpdatingPlexQueue, let client = plexClient, !tracks.isEmpty else { return }
+        plexError = nil
+        plexQueueMessage = nil
+        guard let controller = activeController,
               let device = deviceManager.activeDevice,
-              let group = deviceManager.group(for: device.uuid) else { return }
+              let group = deviceManager.group(for: device.uuid) else {
+            plexError = "Choose a Sonos room before playing Plex."
+            return
+        }
+        isUpdatingPlexQueue = true
+        defer { isUpdatingPlexQueue = false }
+
+        let room = group.coordinatorUUID
+        let queueURI = "x-rincon-queue:\(room)#0"
+        let audioURLs = tracks.compactMap { client.audioURL(partKey: $0.partKey)?.absoluteString }
+        guard audioURLs.count == tracks.count else {
+            plexError = "Plex returned an invalid audio address."
+            return
+        }
+
+        var addedPositions: [Int] = []
         do {
-            guard let audioURL = client.audioURL(partKey: track.partKey) else { return }
-            let metadata = plexDIDL(track: track)
-
-            try await controller.clearQueue()
-            try await controller.addToQueue(uri: audioURL.absoluteString, metadata: metadata)
-            let queueURI = "x-rincon-queue:\(group.coordinatorUUID)#0"
-            try await controller.playURI(queueURI, metadata: "")
-
-            // Resume from saved position if there's a viewOffset
-            if track.viewOffset > 0 {
-                try await waitForPlaying()
-                let offsetSeconds = track.viewOffset / 1000
-                let h = offsetSeconds / 3600
-                let m = (offsetSeconds % 3600) / 60
-                let s = offsetSeconds % 60
-                let target = String(format: "%d:%02d:%02d", h, m, s)
-                try await controller.seek(to: target)
+            var insertPosition = 0
+            let playNext: Bool
+            switch action {
+            case .playNext: playNext = true
+            default: playNext = false
+            }
+            switch action {
+            case .addToQueue:
+                break
+            case .playNow, .playNext:
+                let media = try await controller.getMediaInfo()
+                if media?.uri == queueURI {
+                    guard let currentTrack = try await controller.getPositionInfo() else {
+                        plexError = "Couldn't find the current track in \(device.roomName)'s queue."
+                        return
+                    }
+                    insertPosition = currentTrack.trackNumber + 1
+                } else {
+                    insertPosition = 1
+                }
             }
 
-            activePlexTrackId = track.id
-            activePlexAlbumId = nil
+            for (track, uri) in zip(tracks, audioURLs) {
+                guard plexClient === client, !Task.isCancelled else { return }
+                let position = try await controller.addToQueue(
+                    uri: uri, metadata: plexDIDL(track: track), position: insertPosition,
+                    enqueueAsNext: playNext && addedPositions.isEmpty
+                )
+                addedPositions.append(position)
+                guard plexClient === client else { return }
+                plexQueuedTracks[room, default: [:]][uri] = track.id
+                if insertPosition > 0 { insertPosition = max(position, insertPosition) + 1 }
+            }
 
-            addPlexRecent(track: track)
-
-            await refreshPlayback()
+            if case .playNow(let startIndex, let offsetSeconds) = action {
+                guard addedPositions.indices.contains(startIndex), addedPositions[startIndex] > 0 else {
+                    plexError = "Added to \(device.roomName)'s queue. Sonos didn't return a track position to play."
+                    return
+                }
+                try await controller.playQueuedTrack(addedPositions[startIndex], queueURI: queueURI)
+                addPlexRecent(track: tracks[startIndex])
+                if offsetSeconds > 0 {
+                    guard try await waitForPlaying(on: controller) else {
+                        plexError = "Playback didn't start in time to resume at the saved position."
+                        return
+                    }
+                    let target = String(format: "%d:%02d:%02d", offsetSeconds / 3600,
+                                        (offsetSeconds % 3600) / 60, offsetSeconds % 60)
+                    try await controller.seek(to: target)
+                }
+                if activeController === controller { await refreshPlayback() }
+            } else {
+                let count = addedPositions.count
+                plexQueueMessage = "Added \(count) \(count == 1 ? "track" : "tracks") to \(device.roomName)."
+            }
         } catch {
-            plexError = "Playback failed: \(error.localizedDescription)"
+            guard plexClient === client, !Task.isCancelled else { return }
+            if addedPositions.count == tracks.count {
+                plexError = "Added to \(device.roomName)'s queue, but playback couldn't start at the requested position."
+            } else if addedPositions.isEmpty {
+                plexError = "Couldn't add tracks to \(device.roomName)'s queue. \(error.localizedDescription)"
+            } else {
+                plexError = "Only \(addedPositions.count) of \(tracks.count) tracks were added to \(device.roomName)'s queue."
+            }
         }
     }
 
@@ -857,15 +929,14 @@ final class AppState {
         addRecent(item)
     }
 
-    private func waitForPlaying() async throws {
+    private func waitForPlaying(on controller: PlaybackController) async throws -> Bool {
         for _ in 0..<20 {
-            if let controller = activeController,
-               let state = try? await controller.getTransportState(),
-               state == .playing {
-                return
+            if try await controller.getTransportState() == .playing {
+                return true
             }
             try await Task.sleep(nanoseconds: 250_000_000)
         }
+        return false
     }
 
     private func plexDIDL(track: PlexTrack) -> String {
@@ -899,41 +970,38 @@ final class AppState {
     }
 
     func reportPlexProgressIfNeeded() async {
-        guard let client = plexClient,
-              let controller = activeController,
-              let trackId = activePlexTrackId else { return }
+        guard !isReportingPlexProgress, !isUpdatingPlexQueue,
+              let client = plexClient,
+              let device = deviceManager.activeDevice,
+              let room = deviceManager.group(for: device.uuid)?.coordinatorUUID,
+              let position = playbackState.currentTrack,
+              let trackId = plexQueuedTracks[room]?[position.uri] else { return }
 
-        // Throttle: only report every 30 seconds
-        if let lastReport = lastPlexReportTime,
-           Date.now.timeIntervalSince(lastReport) < 30 {
+        let state: String
+        switch playbackState.transportState {
+        case .playing: state = "playing"
+        case .pausedPlayback: state = "paused"
+        default: return
+        }
+        if let last = lastPlexReport, last.room == room, last.track == trackId,
+           last.state == state, Date.now.timeIntervalSince(last.date) < 30 {
             return
         }
-
+        let durationMs = parseSleepTime(position.duration) * 1000
+        guard durationMs > 0 else { return }
+        isReportingPlexProgress = true
+        defer { isReportingPlexProgress = false }
         do {
-            let transportState = try await controller.getTransportState()
-            guard let positionInfo = try await controller.getPositionInfo() else { return }
-
-            let elapsedSeconds = parseSleepTime(positionInfo.elapsed)
-            let durationSeconds = parseSleepTime(positionInfo.duration)
-
-            let state: String
-            switch transportState {
-            case .playing: state = "playing"
-            case .pausedPlayback: state = "paused"
-            default: state = "stopped"
-            }
-
-            let offsetMs = elapsedSeconds * 1000
-            let durationMs = durationSeconds * 1000
-
             try await client.reportProgress(
                 trackId: trackId,
-                offsetMs: offsetMs,
+                offsetMs: parseSleepTime(position.elapsed) * 1000,
                 duration: durationMs,
                 state: state
             )
 
-            lastPlexReportTime = Date.now
+            if plexClient === client {
+                lastPlexReport = (room, trackId, state, .now)
+            }
         } catch {
             #if DEBUG
             print("[Plex] Progress report failed: \(error)")
@@ -1203,7 +1271,10 @@ final class AppState {
             try await controller.playURI(uri, metadata: didl)
 
             if seekOffsetMs > 0 {
-                try await waitForPlaying()
+                guard try await waitForPlaying(on: controller) else {
+                    audibleError = "Playback didn't start in time to resume at the saved position."
+                    return
+                }
                 let totalSeconds = seekOffsetMs / 1000
                 let h = totalSeconds / 3600
                 let m = (totalSeconds % 3600) / 60

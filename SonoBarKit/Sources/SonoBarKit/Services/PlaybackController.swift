@@ -205,11 +205,17 @@ public final class PlaybackController: Sendable {
         )
     }
 
-    /// Adds a track (or container URI) to the end of the Sonos queue.
+    /// Adds a track or container at a 1-based queue position, or appends when the position is 0.
+    /// Use `enqueueAsNext` alongside the position to also select the next item in shuffle mode.
     /// Returns the 1-based track number at which the enqueued content starts,
     /// or 0 if the speaker didn't report a position.
     @discardableResult
-    public func addToQueue(uri: String, metadata: String) async throws -> Int {
+    public func addToQueue(
+        uri: String,
+        metadata: String,
+        position: Int = 0,
+        enqueueAsNext: Bool = false
+    ) async throws -> Int {
         let result = try await client.callAction(
             service: .avTransport,
             action: "AddURIToQueue",
@@ -217,8 +223,8 @@ public final class PlaybackController: Sendable {
                 ("InstanceID", "0"),
                 ("EnqueuedURI", uri),
                 ("EnqueuedURIMetaData", metadata),
-                ("DesiredFirstTrackNumberEnqueued", "0"),
-                ("EnqueueAsNext", "0")
+                ("DesiredFirstTrackNumberEnqueued", "\(position)"),
+                ("EnqueueAsNext", enqueueAsNext ? "1" : "0")
             ]
         )
         return Int(result["FirstTrackNumberEnqueued"] ?? "0") ?? 0
@@ -226,13 +232,27 @@ public final class PlaybackController: Sendable {
 
     // MARK: - Play URI
 
+    /// Selects the queue and seeks before starting playback, so queued items ahead of the target do not play.
+    public func playQueuedTrack(_ trackNumber: Int, queueURI: String) async throws {
+        let media = try await getMediaInfo()
+        if media?.uri != queueURI {
+            try await setTransportURI(queueURI, metadata: "")
+        }
+        try await seekToTrack(trackNumber)
+        try await play()
+    }
+
     /// Plays a URI with optional metadata.
     public func playURI(_ uri: String, metadata: String) async throws {
+        try await setTransportURI(uri, metadata: metadata)
+        try await play()
+    }
+
+    private func setTransportURI(_ uri: String, metadata: String) async throws {
         _ = try await client.callAction(
             service: .avTransport,
             action: "SetAVTransportURI",
             params: [("InstanceID", "0"), ("CurrentURI", uri), ("CurrentURIMetaData", metadata)]
         )
-        try await play()
     }
 }
