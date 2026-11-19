@@ -31,6 +31,7 @@ struct BrowseView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .controlSize(.mini)
             .padding(.horizontal, 12)
             .padding(.top, 10)
             .padding(.bottom, 4)

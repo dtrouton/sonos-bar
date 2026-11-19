@@ -8,11 +8,24 @@ import Foundation
 
 // MARK: - PlexError
 
-public enum PlexError: Error, Sendable, Equatable {
+public enum PlexError: LocalizedError, Sendable, Equatable {
     case invalidURL(String)
     case unauthorized
     case httpError(Int)
     case serverUnreachable
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "The Plex server address is invalid."
+        case .unauthorized:
+            return "The Plex server rejected your sign-in."
+        case .httpError(let status):
+            return "The Plex server returned HTTP \(status)."
+        case .serverUnreachable:
+            return "Couldn’t reach the Plex server."
+        }
+    }
 }
 
 // MARK: - PlexClient
@@ -83,7 +96,7 @@ public final class PlexClient: Sendable {
             return try await searchLibrary(query: query, sectionId: sectionId)
         }
 
-        var queryItems = [
+        let queryItems = [
             URLQueryItem(name: "query", value: query),
         ]
 
@@ -97,25 +110,32 @@ public final class PlexClient: Sendable {
         try checkStatus(httpResponse)
 
         // Parse the Hub structure: MediaContainer.Hub[].Metadata[]
-        struct HubResponse: Codable {
+        struct HubResponse: Decodable {
             let MediaContainer: HubContainer
         }
-        struct HubContainer: Codable {
+        struct HubContainer: Decodable {
             let Hub: [Hub]?
         }
-        struct Hub: Codable {
-            let type: String?
-            let Metadata: [PlexAlbum]?
+        struct Hub: Decodable {
+            let albums: [PlexAlbum]
+
+            enum CodingKeys: String, CodingKey {
+                case type
+                case metadata = "Metadata"
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                if try container.decodeIfPresent(String.self, forKey: .type) == "album" {
+                    albums = try container.decodeIfPresent([PlexAlbum].self, forKey: .metadata) ?? []
+                } else {
+                    albums = []
+                }
+            }
         }
 
         let response = try JSONDecoder().decode(HubResponse.self, from: data)
-        // Extract albums from the "album" and "artist" hubs
-        var results: [PlexAlbum] = []
-        for hub in response.MediaContainer.Hub ?? [] {
-            guard hub.type == "album", let items = hub.Metadata else { continue }
-            results.append(contentsOf: items)
-        }
-        return results
+        return (response.MediaContainer.Hub ?? []).flatMap(\.albums)
     }
 
     /// Searches a specific library section directly, bypassing hubs.

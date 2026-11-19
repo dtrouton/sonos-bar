@@ -658,115 +658,100 @@ final class AppState {
 
     // MARK: - Plex Integration
 
+    enum PlexConnection: Equatable {
+        case checking
+        case connected
+        case signInRequired
+        case failed(String)
+    }
+
     private(set) var plexClient: PlexClient?
-    var plexLibraries: [PlexLibrary] = []
-    var plexOnDeck: [PlexTrack] = []
-    var plexAlbums: [PlexAlbum] = []
-    var plexTracks: [PlexTrack] = []
+    private(set) var plexConnection: PlexConnection = .checking
+    private(set) var plexLibraries: [PlexLibrary] = []
+    private(set) var plexOnDeck: [PlexTrack] = []
+    private(set) var plexOnDeckError: String?
     var plexError: String?
-    var isPlexLoading = false
     var activePlexTrackId: String?
     var activePlexAlbumId: String?
     private var lastPlexReportTime: Date?
 
     private static let plexHostKey = "plexServerIP"
 
-    func connectPlex(host: String, token: String) {
+    func connectPlex(host: String, token: String) throws {
+        try PlexKeychain.setToken(token)
         UserDefaults.standard.set(host, forKey: Self.plexHostKey)
-        PlexKeychain.setToken(token)
         plexClient = PlexClient(host: host, token: token)
+        plexConnection = .checking
         plexError = nil
-        Task { await loadPlexLibraries() }
     }
 
     func disconnectPlex() {
         UserDefaults.standard.removeObject(forKey: Self.plexHostKey)
         PlexKeychain.deleteToken()
         plexClient = nil
+        plexConnection = .checking
         plexLibraries = []
         plexOnDeck = []
-        plexAlbums = []
-        plexTracks = []
+        plexOnDeckError = nil
         plexError = nil
-        isPlexLoading = false
         activePlexTrackId = nil
         activePlexAlbumId = nil
         lastPlexReportTime = nil
     }
 
     func initPlexIfConfigured() {
-        guard let host = UserDefaults.standard.string(forKey: Self.plexHostKey),
+        guard plexClient == nil,
+              let host = UserDefaults.standard.string(forKey: Self.plexHostKey),
               let token = PlexKeychain.getToken() else { return }
         plexClient = PlexClient(host: host, token: token)
-        Task { await loadPlexLibraries() }
     }
 
-    func loadPlexLibraries() async {
+    func requirePlexSignIn(for client: PlexClient) {
+        guard plexClient === client else { return }
+        plexConnection = .signInRequired
+        plexLibraries = []
+        plexOnDeck = []
+        plexOnDeckError = nil
+        plexError = nil
+    }
+
+    func loadPlexHome() async {
         guard let client = plexClient else { return }
-        isPlexLoading = true
-        defer { isPlexLoading = false }
-        do {
-            let all = try await client.getLibraries()
-            plexLibraries = all.filter { $0.type == "artist" }
-            plexError = nil
-        } catch {
-            plexError = "Failed to load libraries: \(error.localizedDescription)"
+        if plexConnection != .connected {
+            plexConnection = .checking
         }
-    }
 
-    func loadPlexOnDeck() async {
-        guard let client = plexClient else { return }
-        isPlexLoading = true
-        defer { isPlexLoading = false }
+        let libraries: [PlexLibrary]
         do {
-            var allTracks: [PlexTrack] = []
-            for library in plexLibraries {
-                let tracks = try await client.getOnDeck(sectionId: library.id)
-                allTracks.append(contentsOf: tracks)
+            libraries = try await client.getLibraries().filter { $0.type == "artist" }
+        } catch {
+            guard !Task.isCancelled, plexClient === client else { return }
+            if error as? PlexError == .unauthorized {
+                requirePlexSignIn(for: client)
+            } else {
+                plexConnection = .failed(error.localizedDescription)
             }
-            plexOnDeck = allTracks.sorted { a, b in
-                (a.lastViewedAt ?? .distantPast) > (b.lastViewedAt ?? .distantPast)
+            return
+        }
+        guard !Task.isCancelled, plexClient === client, plexConnection != .signInRequired else { return }
+        plexLibraries = libraries
+        plexConnection = .connected
+        plexOnDeckError = nil
+
+        var tracks: [PlexTrack] = []
+        var onDeckError: String?
+        for library in libraries {
+            do {
+                tracks.append(contentsOf: try await client.getOnDeck(sectionId: library.id))
+            } catch {
+                onDeckError = "Couldn’t load Continue Listening. \(error.localizedDescription)"
             }
-            plexError = nil
-        } catch {
-            plexError = "Failed to load on-deck: \(error.localizedDescription)"
+            guard !Task.isCancelled, plexClient === client, plexConnection == .connected else { return }
         }
-    }
-
-    func loadPlexAlbums(sectionId: String) async {
-        guard let client = plexClient else { return }
-        isPlexLoading = true
-        defer { isPlexLoading = false }
-        do {
-            plexAlbums = try await client.getAlbums(sectionId: sectionId)
-            plexError = nil
-        } catch {
-            plexError = "Failed to load albums: \(error.localizedDescription)"
+        plexOnDeck = tracks.sorted {
+            ($0.lastViewedAt ?? .distantPast) > ($1.lastViewedAt ?? .distantPast)
         }
-    }
-
-    func loadPlexTracks(albumId: String) async {
-        guard let client = plexClient else { return }
-        isPlexLoading = true
-        defer { isPlexLoading = false }
-        do {
-            plexTracks = try await client.getTracks(albumId: albumId)
-            plexError = nil
-        } catch {
-            plexError = "Failed to load tracks: \(error.localizedDescription)"
-        }
-    }
-
-    func searchPlex(query: String, sectionId: String? = nil) async {
-        guard let client = plexClient else { return }
-        isPlexLoading = true
-        defer { isPlexLoading = false }
-        do {
-            plexAlbums = try await client.search(query: query, sectionId: sectionId)
-            plexError = nil
-        } catch {
-            plexError = "Search failed: \(error.localizedDescription)"
-        }
+        plexOnDeckError = onDeckError
     }
 
     // MARK: - Plex Playback

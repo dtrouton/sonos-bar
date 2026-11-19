@@ -10,16 +10,17 @@ struct PlexSetupView: View {
     @State private var serverIP = ""
     @State private var errorMessage: String?
     @State private var isScanning = false
-    @State private var isAuthenticating = false
-    @State private var authPinId: Int?
+    @State private var authTask: Task<Void, Never>?
     @State private var discoveredServers: [String] = []
 
     private static let clientIdentifier = "com.sonobar.plex"
     private static let productName = "SonoBar"
 
     private var isConnected: Bool {
-        appState.plexClient != nil
+        appState.plexClient != nil && appState.plexConnection != .signInRequired
     }
+
+    private var isAuthenticating: Bool { authTask != nil }
 
     var body: some View {
         ScrollView {
@@ -39,10 +40,11 @@ struct PlexSetupView: View {
     private var connectedView: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
+                let isVerified = appState.plexConnection == .connected
+                Image(systemName: isVerified ? "checkmark.circle.fill" : "server.rack")
+                    .foregroundColor(isVerified ? .green : .secondary)
                     .font(.system(size: 16))
-                Text("Connected to Plex")
+                Text(isVerified ? "Connected to Plex" : "Saved Plex server")
                     .font(.system(size: 13, weight: .semibold))
             }
 
@@ -74,6 +76,13 @@ struct PlexSetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Connect to Plex")
                 .font(.system(size: 13, weight: .semibold))
+
+            if appState.plexConnection == .signInRequired {
+                Text("Plex rejected your saved sign-in. Sign in again to browse your libraries.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             // Server IP
             VStack(alignment: .leading, spacing: 4) {
@@ -132,7 +141,7 @@ struct PlexSetupView: View {
 
             // Sign in button
             Button {
-                Task { await signInWithPlex() }
+                authTask = Task { await signInWithPlex() }
             } label: {
                 if isAuthenticating {
                     HStack(spacing: 6) {
@@ -146,7 +155,7 @@ struct PlexSetupView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled(serverIP.isEmpty || isAuthenticating)
+            .disabled(serverIP.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAuthenticating)
 
             if isAuthenticating {
                 Text("A browser window has opened. Sign in to your Plex account and click Allow.")
@@ -155,14 +164,14 @@ struct PlexSetupView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Button("Cancel") {
-                    isAuthenticating = false
-                    authPinId = nil
+                    authTask?.cancel()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
         }
         .onAppear {
+            guard serverIP.isEmpty else { return }
             serverIP = UserDefaults.standard.string(forKey: "plexServerIP") ?? ""
             if serverIP.isEmpty {
                 scanNetwork()
@@ -173,13 +182,14 @@ struct PlexSetupView: View {
     // MARK: - Plex OAuth PIN Flow
 
     private func signInWithPlex() async {
+        defer { authTask = nil }
         errorMessage = nil
-        isAuthenticating = true
+        let host = serverIP.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
             // Step 1: Request a PIN from plex.tv
             let pin = try await requestPin()
-            authPinId = pin.id
+            try Task.checkCancellation()
 
             // Step 2: Open browser for user to authorize
             let authURL = "https://app.plex.tv/auth#?clientID=\(Self.clientIdentifier)&code=\(pin.code)&context%5Bdevice%5D%5Bproduct%5D=\(Self.productName)"
@@ -191,24 +201,18 @@ struct PlexSetupView: View {
             let token = try await pollForToken(pinId: pin.id)
 
             // Step 4: Connect with the token
-            let testClient = PlexClient(host: serverIP, token: token)
-            let libraries = try await testClient.getLibraries()
-            guard !libraries.isEmpty else {
-                errorMessage = "Connected to Plex account but no libraries found on \(serverIP)."
-                isAuthenticating = false
-                return
-            }
+            let testClient = PlexClient(host: host, token: token)
+            _ = try await testClient.getLibraries()
+            try Task.checkCancellation()
 
-            appState.connectPlex(host: serverIP, token: token)
-            isAuthenticating = false
-        } catch PlexAuthError.cancelled {
-            isAuthenticating = false
+            try appState.connectPlex(host: host, token: token)
+        } catch is CancellationError {
+            return
         } catch PlexAuthError.timeout {
             errorMessage = "Sign-in timed out. Please try again."
-            isAuthenticating = false
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "Sign-in failed: \(error.localizedDescription)"
-            isAuthenticating = false
         }
     }
 
@@ -218,7 +222,6 @@ struct PlexSetupView: View {
     }
 
     private enum PlexAuthError: Error {
-        case cancelled
         case timeout
         case invalidResponse
     }
@@ -245,8 +248,6 @@ struct PlexSetupView: View {
 
     private func pollForToken(pinId: Int) async throws -> String {
         for _ in 0..<60 { // 2 minutes at 2-second intervals
-            guard isAuthenticating else { throw PlexAuthError.cancelled }
-
             try await Task.sleep(for: .seconds(2))
 
             let url = URL(string: "https://plex.tv/api/v2/pins/\(pinId)")!

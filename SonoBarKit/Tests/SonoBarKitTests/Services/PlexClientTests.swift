@@ -134,6 +134,25 @@ struct PlexClientTests {
         #expect(tracks[0].partKey == "/library/parts/200/file.mp3")
     }
 
+    @Test func testSearchDecodesAlbumsAlongsideOtherHubTypes() async throws {
+        let mock = CapturingHTTPClient()
+        mock.responseData = Data("""
+        {
+            "MediaContainer": {
+                "Hub": [
+                    { "type": "genre", "Metadata": [{ "tag": "Rock" }] },
+                    { "type": "album", "Metadata": [{ "ratingKey": "100", "title": "Abbey Road" }] }
+                ]
+            }
+        }
+        """.utf8)
+        let client = PlexClient(host: "192.168.1.50", token: "test-token", httpClient: mock)
+
+        let albums = try await client.search(query: "Abbey")
+
+        #expect(albums.map(\.title) == ["Abbey Road"])
+    }
+
     // MARK: - Test: audioURL constructs correctly
 
     @Test func testAudioURLConstructsCorrectly() async throws {

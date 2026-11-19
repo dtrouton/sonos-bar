@@ -5,7 +5,9 @@ import SonoBarKit
 struct PlexBrowseView: View {
     @Environment(AppState.self) private var appState
     @State private var searchText = ""
-    @State private var searchTask: Task<Void, Never>?
+    @State private var showsSettings = false
+    @State private var connectionAttempt = 0
+    @State private var response: BrowseResponse?
 
     /// Simple navigation stack: each entry describes a pushed view.
     enum PlexNav: Equatable {
@@ -14,6 +16,42 @@ struct PlexBrowseView: View {
     }
 
     @State private var navigationPath: [PlexNav] = []
+
+    private enum BrowseRequest: Equatable {
+        case albums(String)
+        case tracks(String)
+        case search(String, sectionId: String?)
+    }
+
+    private struct BrowseResponse {
+        let request: BrowseRequest
+        var albums: [PlexAlbum] = []
+        var tracks: [PlexTrack] = []
+        var error: String?
+    }
+
+    private var browseRequest: BrowseRequest? {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty { return .search(query, sectionId: currentSectionId) }
+        switch navigationPath.last {
+        case .albumList(let library): return .albums(library.id)
+        case .trackList(let album): return .tracks(album.id)
+        case nil: return nil
+        }
+    }
+
+    private var currentResponse: BrowseResponse? {
+        response?.request == browseRequest ? response : nil
+    }
+
+    private struct ConnectionRequest: Equatable {
+        let client: ObjectIdentifier?
+        let attempt: Int
+    }
+
+    private var clientID: ObjectIdentifier? {
+        appState.plexClient.map(ObjectIdentifier.init)
+    }
 
     /// The current library section ID when browsing inside a library, for scoped search.
     private var currentSectionId: String? {
@@ -24,8 +62,54 @@ struct PlexBrowseView: View {
     }
 
     var body: some View {
-        if appState.plexClient == nil {
+        plexContent
+            .task(id: ConnectionRequest(client: clientID, attempt: connectionAttempt)) {
+                guard appState.plexConnection != .signInRequired else { return }
+                await appState.loadPlexHome()
+            }
+            .onChange(of: clientID) {
+                showsSettings = false
+                searchText = ""
+                navigationPath = []
+                response = nil
+            }
+    }
+
+    @ViewBuilder
+    private var plexContent: some View {
+        if appState.plexClient == nil || appState.plexConnection == .signInRequired {
             PlexSetupView()
+        } else if showsSettings {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    showsSettings = false
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
+                .padding(12)
+
+                PlexSetupView()
+            }
+        } else if appState.plexConnection == .checking {
+            ProgressView("Checking Plex connection…")
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if case .failed(let message) = appState.plexConnection {
+            VStack(spacing: 8) {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .multilineTextAlignment(.center)
+                HStack {
+                    Button("Retry") { connectionAttempt += 1 }
+                    Button("Plex Settings") { showsSettings = true }
+                }
+                .controlSize(.small)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 0) {
                 // Search bar — always visible
@@ -35,18 +119,6 @@ struct PlexBrowseView: View {
                     TextField(searchPlaceholder, text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
-                        .onChange(of: searchText) { _, newValue in
-                            searchTask?.cancel()
-                            if newValue.isEmpty {
-                                appState.plexAlbums = []
-                                return
-                            }
-                            searchTask = Task {
-                                try? await Task.sleep(nanoseconds: 300_000_000)
-                                guard !Task.isCancelled else { return }
-                                await appState.searchPlex(query: newValue, sectionId: currentSectionId)
-                            }
-                        }
                     if !searchText.isEmpty {
                         Button { searchText = "" } label: {
                             Image(systemName: "xmark.circle.fill")
@@ -63,8 +135,16 @@ struct PlexBrowseView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 4)
 
-                // Back button when navigated deeper
-                if !navigationPath.isEmpty && searchText.isEmpty {
+                if let error = appState.plexError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                }
+
+                if !navigationPath.isEmpty && !isSearching {
                     HStack(spacing: 4) {
                         Button {
                             navigationPath.removeLast()
@@ -84,15 +164,20 @@ struct PlexBrowseView: View {
                     .padding(.bottom, 4)
                 }
 
-                if !searchText.isEmpty {
+                if let error = currentResponse?.error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .multilineTextAlignment(.center)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if isSearching {
                     // Search results overlay any navigation level
                     PlexAlbumListView(
                         libraryTitle: "Search Results",
-                        albums: appState.plexAlbums,
-                        isLoading: appState.isPlexLoading
+                        albums: currentResponse?.albums ?? [],
+                        isLoading: currentResponse == nil
                     ) { album in
                         searchText = ""
-                        Task { await appState.loadPlexTracks(albumId: album.id) }
                         navigationPath.append(.trackList(album: album))
                     }
                 } else {
@@ -101,21 +186,17 @@ struct PlexBrowseView: View {
                     case .albumList(let library):
                         PlexAlbumListView(
                             libraryTitle: library.title,
-                            albums: appState.plexAlbums,
-                            isLoading: appState.isPlexLoading
+                            albums: currentResponse?.albums ?? [],
+                            isLoading: currentResponse == nil
                         ) { album in
-                            Task { await appState.loadPlexTracks(albumId: album.id) }
                             navigationPath.append(.trackList(album: album))
-                        }
-                        .onAppear {
-                            Task { await appState.loadPlexAlbums(sectionId: library.id) }
                         }
 
                     case .trackList(let album):
                         PlexTrackListView(
                             album: album,
-                            tracks: appState.plexTracks,
-                            isLoading: appState.isPlexLoading
+                            tracks: currentResponse?.tracks ?? [],
+                            isLoading: currentResponse == nil
                         )
 
                     case nil:
@@ -123,13 +204,41 @@ struct PlexBrowseView: View {
                     }
                 }
             }
-            .onAppear {
-                Task {
-                    await appState.loadPlexLibraries()
-                    await appState.loadPlexOnDeck()
-                }
+            .task(id: browseRequest) {
+                await loadBrowseResponse(for: browseRequest)
             }
         }
+    }
+
+    private var isSearching: Bool {
+        if case .search = browseRequest { return true }
+        return false
+    }
+
+    private func loadBrowseResponse(for request: BrowseRequest?) async {
+        guard let request, let client = appState.plexClient, !Task.isCancelled else { return }
+        response = nil
+        var result = BrowseResponse(request: request)
+        do {
+            switch request {
+            case .albums(let sectionId):
+                result.albums = try await client.getAlbums(sectionId: sectionId)
+            case .tracks(let albumId):
+                result.tracks = try await client.getTracks(albumId: albumId)
+            case .search(let query, let sectionId):
+                try await Task.sleep(for: .milliseconds(300))
+                result.albums = try await client.search(query: query, sectionId: sectionId)
+            }
+        } catch {
+            guard !Task.isCancelled, appState.plexClient === client, browseRequest == request else { return }
+            if error as? PlexError == .unauthorized {
+                appState.requirePlexSignIn(for: client)
+                return
+            }
+            result.error = error.localizedDescription
+        }
+        guard !Task.isCancelled, appState.plexClient === client, browseRequest == request else { return }
+        response = result
     }
 
     private var searchPlaceholder: String {
@@ -172,7 +281,6 @@ struct PlexBrowseView: View {
                             LazyVStack(spacing: 0) {
                                 ForEach(appState.plexLibraries) { library in
                                     Button {
-                                        Task { await appState.loadPlexAlbums(sectionId: library.id) }
                                         navigationPath.append(.albumList(library: library))
                                     } label: {
                                         HStack {
@@ -195,6 +303,18 @@ struct PlexBrowseView: View {
                                     .buttonStyle(.plain)
                                 }
                             }
+                        } else {
+                            Text("No music or audiobook libraries are available to this Plex account.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 12)
+                        }
+
+                        if let error = appState.plexOnDeckError {
+                            Text(error)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 12)
                         }
 
                         // Settings link
@@ -202,8 +322,7 @@ struct PlexBrowseView: View {
                             .padding(.horizontal, 12)
 
                         Button {
-                            navigationPath = []
-                            // Show setup view by disconnecting
+                            showsSettings = true
                         } label: {
                             HStack {
                                 Image(systemName: "gear")
@@ -224,19 +343,6 @@ struct PlexBrowseView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-
-                        // Error display
-                        if let error = appState.plexError {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.orange)
-                                    .font(.system(size: 11))
-                                Text(error)
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.orange)
-                            }
-                            .padding(.horizontal, 12)
-                        }
                     }
                     .padding(.top, 4)
                     .padding(.bottom, 12)

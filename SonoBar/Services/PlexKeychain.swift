@@ -8,6 +8,14 @@ enum PlexKeychain {
     private static let service = "com.sonobar.plex"
     private static let account = "token"
 
+    private struct SaveError: LocalizedError {
+        let status: OSStatus
+
+        var errorDescription: String? {
+            "Couldn’t save your Plex sign-in in Keychain (\(status))."
+        }
+    }
+
     /// Reads the stored Plex token, or nil if not set.
     static func getToken() -> String? {
         let query: [String: Any] = [
@@ -24,16 +32,19 @@ enum PlexKeychain {
     }
 
     /// Stores the Plex token in the Keychain. Overwrites if exists.
-    static func setToken(_ token: String) {
-        deleteToken()
-        let data = Data(token.utf8)
+    static func setToken(_ token: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: data
+            kSecAttrAccount as String: account
         ]
-        SecItemAdd(query as CFDictionary, nil)
+        let attributes = [kSecValueData as String: Data(token.utf8)]
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            let item = query.merging(attributes) { _, newValue in newValue }
+            status = SecItemAdd(item as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else { throw SaveError(status: status) }
     }
 
     /// Removes the Plex token from the Keychain.
