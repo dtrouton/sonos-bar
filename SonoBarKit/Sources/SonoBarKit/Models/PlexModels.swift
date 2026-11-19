@@ -43,6 +43,7 @@ public struct PlexAlbum: Identifiable, Sendable, Codable, Equatable {
 /// A Plex audio track with playback progress info.
 public struct PlexTrack: Identifiable, Sendable {
     public let id: String
+    public let albumId: String?
     public let title: String
     public let albumTitle: String
     public let artistName: String
@@ -57,6 +58,7 @@ public struct PlexTrack: Identifiable, Sendable {
 extension PlexTrack: Codable {
     enum CodingKeys: String, CodingKey {
         case id = "ratingKey"
+        case albumId = "parentRatingKey"
         case title
         case albumTitle = "parentTitle"
         case artistName = "grandparentTitle"
@@ -80,6 +82,7 @@ extension PlexTrack: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
+        albumId = try container.decodeIfPresent(String.self, forKey: .albumId)
         title = try container.decode(String.self, forKey: .title)
         albumTitle = try container.decodeIfPresent(String.self, forKey: .albumTitle) ?? ""
         artistName = try container.decodeIfPresent(String.self, forKey: .artistName) ?? ""
@@ -111,6 +114,7 @@ extension PlexTrack: Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(albumId, forKey: .albumId)
         try container.encode(title, forKey: .title)
         try container.encode(albumTitle, forKey: .albumTitle)
         try container.encode(artistName, forKey: .artistName)

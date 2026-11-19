@@ -134,6 +134,40 @@ struct PlexClientTests {
         #expect(tracks[0].partKey == "/library/parts/200/file.mp3")
     }
 
+    @Test func testContinueListeningKeepsSavedOffsetAndQueuesFollowingChapters() async throws {
+        func chapter(id: String, offset: Int = 0) -> String {
+            """
+            {"ratingKey":"\(id)","parentRatingKey":"100","title":"Chapter \(id)","viewOffset":\(offset),
+             "Media":[{"Part":[{"key":"/library/parts/\(id)/file.mp3"}]}]}
+            """
+        }
+        let resume = try JSONDecoder().decode(PlexTrack.self, from: Data(chapter(id: "2", offset: 42_000).utf8))
+        let chapters = [chapter(id: "1"), chapter(id: "2"), chapter(id: "3")].joined(separator: ",")
+        let mock = CapturingHTTPClient()
+        mock.responseData = Data("""
+        {"MediaContainer":{"Metadata":[\(chapters)]}}
+        """.utf8)
+        let client = PlexClient(host: "192.168.1.50", token: "test-token", httpClient: mock)
+
+        let tracks = try await client.getResumeTracks(startingAt: resume)
+
+        #expect(tracks.map(\.id) == ["2", "3"])
+        #expect(tracks.first?.viewOffset == 42_000)
+        #expect(mock.lastRequest?.url?.path == "/library/metadata/100/children")
+    }
+
+    @Test func testContinueListeningAcceptsTracksWithoutAnAlbumId() async throws {
+        let response = try JSONDecoder().decode(PlexResponse<PlexTrack>.self, from: Self.tracksJSON)
+        let resume = try #require(response.mediaContainer.items.first)
+        let mock = CapturingHTTPClient()
+        let client = PlexClient(host: "192.168.1.50", token: "test-token", httpClient: mock)
+
+        let tracks = try await client.getResumeTracks(startingAt: resume)
+
+        #expect(tracks.map(\.id) == [resume.id])
+        #expect(mock.requests.isEmpty)
+    }
+
     @Test func testSearchDecodesAlbumsAlongsideOtherHubTypes() async throws {
         let mock = CapturingHTTPClient()
         mock.responseData = Data("""

@@ -71,6 +71,14 @@ public final class PlexClient: Sendable {
         try await get("/library/metadata/\(albumId)/children")
     }
 
+    /// Keeps the saved chapter from Continue Listening and adds the chapters that follow it.
+    public func getResumeTracks(startingAt track: PlexTrack) async throws -> [PlexTrack] {
+        guard let albumId = track.albumId, !albumId.isEmpty else { return [track] }
+        let album = try await getTracks(albumId: albumId)
+        guard let index = album.firstIndex(where: { $0.id == track.id }) else { return [track] }
+        return [track] + album.dropFirst(index + 1)
+    }
+
     // MARK: - On Deck / Continue Listening
 
     /// Fetches on-deck (continue listening) tracks for a library section.
@@ -150,7 +158,10 @@ public final class PlexClient: Sendable {
     // MARK: - Progress Reporting
 
     /// Reports playback progress to the Plex server for resume support.
-    public func reportProgress(trackId: String, offsetMs: Int, duration: Int, state: String) async throws {
+    public func reportProgress(
+        trackId: String, offsetMs: Int, duration: Int, state: String,
+        clientIdentifier: String = "com.sonobar.plex"
+    ) async throws {
         let queryItems = [
             URLQueryItem(name: "ratingKey", value: trackId),
             URLQueryItem(name: "key", value: "/library/metadata/\(trackId)"),
@@ -158,7 +169,7 @@ public final class PlexClient: Sendable {
             URLQueryItem(name: "duration", value: String(duration)),
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library"),
-            URLQueryItem(name: "X-Plex-Client-Identifier", value: "com.sonobar.plex"),
+            URLQueryItem(name: "X-Plex-Client-Identifier", value: clientIdentifier),
         ]
 
         let url = try buildURL(path: "/:/timeline", queryItems: queryItems)

@@ -88,15 +88,7 @@ final class AppState {
         }
 
         mediaKeyController.onPlayPause = { [weak self] in
-            guard let self else { return }
-            Task {
-                if self.playbackState.transportState == .playing {
-                    try? await self.activeController?.pause()
-                } else {
-                    try? await self.activeController?.play()
-                }
-                await self.refreshPlayback()
-            }
+            Task { await self?.togglePlayback() }
         }
         mediaKeyController.onNext = { [weak self] in
             guard let self else { return }
@@ -133,6 +125,23 @@ final class AppState {
             playbackRefreshPending = false
             await refreshPlayback(controller: controller, roomController: roomController)
         } while activeController === controller && playbackRefreshPending
+    }
+
+    func togglePlayback() async {
+        guard let controller = activeController else { return }
+        let room = deviceManager.activeDevice.flatMap { deviceManager.group(for: $0.uuid)?.coordinatorUUID }
+        let monitor = room.flatMap { plexProgressRooms[$0]?.monitor }
+        do {
+            if playbackState.transportState == .playing {
+                try await controller.pause()
+            } else {
+                try await controller.play()
+            }
+            if let monitor { Task { await monitor.sample() } }
+        } catch {
+            // Refresh from Sonos to keep the control in sync if the command failed.
+        }
+        await refreshPlayback()
     }
 
     private func refreshPlayback(controller: PlaybackController, roomController: PlaybackController) async {
@@ -634,9 +643,14 @@ final class AppState {
         eventSpeakerIP = speakerIP
 
         do {
-            try await listener.start { [weak self, weak listener] _, _ in
+            try await listener.start { [weak self, weak listener] service, properties in
+                let paused = service == .avTransport && properties.values.contains { $0.contains("PAUSED_PLAYBACK") }
                 Task { @MainActor [weak self, weak listener] in
                     guard let self, let listener, self.eventListener === listener else { return }
+                    if paused, let room = self.deviceManager.group(for: device.uuid)?.coordinatorUUID,
+                       let monitor = self.plexProgressRooms[room]?.monitor {
+                        Task { await monitor.sample() }
+                    }
                     await self.refreshPlayback()
                 }
             }
@@ -727,15 +741,18 @@ final class AppState {
     var plexError: String?
     private(set) var plexQueueMessage: String?
     private(set) var isUpdatingPlexQueue = false
-    private var plexQueuedTracks: [String: [String: String]] = [:]
-    private var lastPlexReport: (room: String, track: String, state: String, date: Date)?
-    private var isReportingPlexProgress = false
+    private struct PlexProgressRoom {
+        let monitor: PlexProgressMonitor
+        let task: Task<Void, Never>
+    }
+    @ObservationIgnored private var plexProgressRooms: [String: PlexProgressRoom] = [:]
 
     private static let plexHostKey = "plexServerIP"
 
     func connectPlex(host: String, token: String) throws {
         try PlexKeychain.setToken(token)
         UserDefaults.standard.set(host, forKey: Self.plexHostKey)
+        stopPlexProgressMonitoring()
         plexClient = PlexClient(host: host, token: token)
         plexConnection = .checking
         plexError = nil
@@ -751,8 +768,7 @@ final class AppState {
         plexOnDeckError = nil
         plexError = nil
         plexQueueMessage = nil
-        plexQueuedTracks = [:]
-        lastPlexReport = nil
+        stopPlexProgressMonitoring()
     }
 
     func initPlexIfConfigured() {
@@ -764,6 +780,7 @@ final class AppState {
 
     func requirePlexSignIn(for client: PlexClient) {
         guard plexClient === client else { return }
+        stopPlexProgressMonitoring()
         plexConnection = .signInRequired
         plexLibraries = []
         plexOnDeck = []
@@ -819,11 +836,19 @@ final class AppState {
     }
 
     func resumePlexTrack(_ track: PlexTrack) async {
-        await queuePlexTracks([track], action: .playNow(offsetSeconds: track.viewOffset / 1000))
+        await updatePlexQueue(action: .playNow(offsetSeconds: track.viewOffset / 1000)) { client in
+            try await client.getResumeTracks(startingAt: track)
+        }
     }
 
     func queuePlexTracks(_ tracks: [PlexTrack], action: PlexQueueAction) async {
-        guard !isUpdatingPlexQueue, let client = plexClient, !tracks.isEmpty else { return }
+        await updatePlexQueue(action: action) { _ in tracks }
+    }
+
+    private func updatePlexQueue(
+        action: PlexQueueAction, loadTracks: (PlexClient) async throws -> [PlexTrack]
+    ) async {
+        guard !isUpdatingPlexQueue, plexConnection != .signInRequired, let client = plexClient else { return }
         plexError = nil
         plexQueueMessage = nil
         guard let controller = activeController,
@@ -835,7 +860,34 @@ final class AppState {
         isUpdatingPlexQueue = true
         defer { isUpdatingPlexQueue = false }
 
+        let tracks: [PlexTrack]
+        do {
+            tracks = try await loadTracks(client)
+        } catch {
+            guard plexClient === client, !Task.isCancelled else { return }
+            if error as? PlexError == .unauthorized {
+                requirePlexSignIn(for: client)
+            } else {
+                plexError = "Couldn't load the remaining chapters. \(error.localizedDescription)"
+            }
+            return
+        }
+        guard plexClient === client, plexConnection != .signInRequired, !Task.isCancelled, !tracks.isEmpty else { return }
         let room = group.coordinatorUUID
+        let monitor = plexProgressMonitor(room: room, controller: controller, client: client)
+        await monitor.beginQueueUpdate()
+        await enqueuePlexTracks(
+            tracks, action: action, client: client, controller: controller,
+            room: room, roomName: device.roomName, monitor: monitor
+        )
+        await monitor.finishQueueUpdate()
+        Task { await monitor.sample() }
+    }
+
+    private func enqueuePlexTracks(
+        _ tracks: [PlexTrack], action: PlexQueueAction, client: PlexClient, controller: PlaybackController,
+        room: String, roomName: String, monitor: PlexProgressMonitor
+    ) async {
         let queueURI = "x-rincon-queue:\(room)#0"
         let audioURLs = tracks.compactMap { client.audioURL(partKey: $0.partKey)?.absoluteString }
         guard audioURLs.count == tracks.count else {
@@ -858,7 +910,7 @@ final class AppState {
                 let media = try await controller.getMediaInfo()
                 if media?.uri == queueURI {
                     guard let currentTrack = try await controller.getPositionInfo() else {
-                        plexError = "Couldn't find the current track in \(device.roomName)'s queue."
+                        plexError = "Couldn't find the current track in \(roomName)'s queue."
                         return
                     }
                     insertPosition = currentTrack.trackNumber + 1
@@ -868,20 +920,20 @@ final class AppState {
             }
 
             for (track, uri) in zip(tracks, audioURLs) {
-                guard plexClient === client, !Task.isCancelled else { return }
+                guard plexClient === client, plexConnection != .signInRequired, !Task.isCancelled else { return }
                 let position = try await controller.addToQueue(
                     uri: uri, metadata: plexDIDL(track: track), position: insertPosition,
                     enqueueAsNext: playNext && addedPositions.isEmpty
                 )
                 addedPositions.append(position)
-                guard plexClient === client else { return }
-                plexQueuedTracks[room, default: [:]][uri] = track.id
+                guard plexClient === client, plexConnection != .signInRequired else { return }
+                await monitor.recordQueuedTrack(id: track.id, uri: uri)
                 if insertPosition > 0 { insertPosition = max(position, insertPosition) + 1 }
             }
 
             if case .playNow(let startIndex, let offsetSeconds) = action {
                 guard addedPositions.indices.contains(startIndex), addedPositions[startIndex] > 0 else {
-                    plexError = "Added to \(device.roomName)'s queue. Sonos didn't return a track position to play."
+                    plexError = "Added to \(roomName)'s queue. Sonos didn't return a track position to play."
                     return
                 }
                 try await controller.playQueuedTrack(addedPositions[startIndex], queueURI: queueURI)
@@ -898,16 +950,16 @@ final class AppState {
                 if activeController === controller { await refreshPlayback() }
             } else {
                 let count = addedPositions.count
-                plexQueueMessage = "Added \(count) \(count == 1 ? "track" : "tracks") to \(device.roomName)."
+                plexQueueMessage = "Added \(count) \(count == 1 ? "track" : "tracks") to \(roomName)."
             }
         } catch {
             guard plexClient === client, !Task.isCancelled else { return }
             if addedPositions.count == tracks.count {
-                plexError = "Added to \(device.roomName)'s queue, but playback couldn't start at the requested position."
+                plexError = "Added to \(roomName)'s queue, but playback couldn't start at the requested position."
             } else if addedPositions.isEmpty {
-                plexError = "Couldn't add tracks to \(device.roomName)'s queue. \(error.localizedDescription)"
+                plexError = "Couldn't add tracks to \(roomName)'s queue. \(error.localizedDescription)"
             } else {
-                plexError = "Only \(addedPositions.count) of \(tracks.count) tracks were added to \(device.roomName)'s queue."
+                plexError = "Only \(addedPositions.count) of \(tracks.count) tracks were added to \(roomName)'s queue."
             }
         }
     }
@@ -969,44 +1021,22 @@ final class AppState {
             .replacingOccurrences(of: "'", with: "&apos;")
     }
 
-    func reportPlexProgressIfNeeded() async {
-        guard !isReportingPlexProgress, !isUpdatingPlexQueue,
-              let client = plexClient,
-              let device = deviceManager.activeDevice,
-              let room = deviceManager.group(for: device.uuid)?.coordinatorUUID,
-              let position = playbackState.currentTrack,
-              let trackId = plexQueuedTracks[room]?[position.uri] else { return }
+    private func plexProgressMonitor(
+        room: String, controller: PlaybackController, client: PlexClient
+    ) -> PlexProgressMonitor {
+        if let existing = plexProgressRooms[room] { return existing.monitor }
+        let monitor = PlexProgressMonitor(controller: controller, client: client, coordinatorUUID: room)
+        let task = Task { await monitor.run() }
+        plexProgressRooms[room] = PlexProgressRoom(monitor: monitor, task: task)
+        return monitor
+    }
 
-        let state: String
-        switch playbackState.transportState {
-        case .playing: state = "playing"
-        case .pausedPlayback: state = "paused"
-        default: return
+    private func stopPlexProgressMonitoring() {
+        for room in plexProgressRooms.values {
+            room.task.cancel()
+            Task { await room.monitor.stop() }
         }
-        if let last = lastPlexReport, last.room == room, last.track == trackId,
-           last.state == state, Date.now.timeIntervalSince(last.date) < 30 {
-            return
-        }
-        let durationMs = parseSleepTime(position.duration) * 1000
-        guard durationMs > 0 else { return }
-        isReportingPlexProgress = true
-        defer { isReportingPlexProgress = false }
-        do {
-            try await client.reportProgress(
-                trackId: trackId,
-                offsetMs: parseSleepTime(position.elapsed) * 1000,
-                duration: durationMs,
-                state: state
-            )
-
-            if plexClient === client {
-                lastPlexReport = (room, trackId, state, .now)
-            }
-        } catch {
-            #if DEBUG
-            print("[Plex] Progress report failed: \(error)")
-            #endif
-        }
+        plexProgressRooms.removeAll()
     }
 
     // MARK: - Audible Integration

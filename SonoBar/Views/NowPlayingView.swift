@@ -327,7 +327,6 @@ struct NowPlayingView: View {
             refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 Task {
                     await appState.refreshPlayback()
-                    await appState.reportPlexProgressIfNeeded()
                 }
             }
         }
@@ -351,14 +350,7 @@ struct NowPlayingView: View {
     // MARK: - Actions
 
     private func performPlayPause() {
-        Task {
-            if isPlaying {
-                try? await appState.activeController?.pause()
-            } else {
-                try? await appState.activeController?.play()
-            }
-            await appState.refreshPlayback()
-        }
+        Task { await appState.togglePlayback() }
     }
 
     private func performNext() {
