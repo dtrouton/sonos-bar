@@ -27,7 +27,9 @@ targets:
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         ENABLE_APP_SANDBOX: "NO"
-        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: "FF3XH4ZJ45"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
         GENERATE_INFOPLIST_FILE: "NO"
     dependencies:
       - package: SonoBarKit

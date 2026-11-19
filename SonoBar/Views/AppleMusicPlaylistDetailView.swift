@@ -40,6 +40,7 @@ struct AppleMusicPlaylistDetailView: View {
         } else {
             ScrollView {
                 VStack(spacing: 0) {
+                    cover
                     Button { Task { await appState.appendAppleMusicPlaylist(playlist) } } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "text.badge.plus").font(.system(size: 10))
@@ -64,10 +65,17 @@ struct AppleMusicPlaylistDetailView: View {
         }
     }
 
+    private var cover: some View {
+        artworkThumbnail(playlist.artworkURL, size: 120)
+            .cornerRadius(6)
+            .padding(.top, 12)
+    }
+
     private func trackRow(index: Int, track: AppleMusicTrack, playable: Bool) -> some View {
         HStack(spacing: 8) {
             Text("\(index)").font(.system(size: 11).monospacedDigit())
-                .foregroundColor(.secondary).frame(width: 24, alignment: .trailing)
+                .foregroundColor(.secondary).frame(width: 20, alignment: .trailing)
+            artworkThumbnail(track.artworkURL, size: 32).cornerRadius(3)
             Text(track.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
                 .foregroundColor(playable ? .primary : .secondary)
             if !playable {
@@ -75,7 +83,22 @@ struct AppleMusicPlaylistDetailView: View {
             }
             Spacer()
         }
-        .padding(.horizontal, 12).padding(.vertical, 6).contentShape(Rectangle())
+        .padding(.horizontal, 12).padding(.vertical, 4).contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func artworkThumbnail(_ url: URL?, size: CGFloat) -> some View {
+        if let url {
+            AsyncImage(url: url) { image in image.resizable().scaledToFill() }
+                placeholder: { Color.secondary.opacity(0.15) }
+                .frame(width: size, height: size).clipped()
+        } else {
+            ZStack {
+                Color.secondary.opacity(0.15)
+                Image(systemName: "music.note.list").font(.system(size: size * 0.3)).foregroundColor(.secondary)
+            }
+            .frame(width: size, height: size)
+        }
     }
 
     private func load() async {

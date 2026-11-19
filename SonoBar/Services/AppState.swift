@@ -1304,7 +1304,52 @@ final class AppState {
     }
 
     func appendAppleMusicPlaylist(_ playlist: AppleMusicPlaylist) async {
-        await appendAppleMusic(.playlist(playlist))
+        // Mirrored playlists carry a catalog id (pl.…) that Sonos plays as a single server-side
+        // container. Un-mirrored library playlists (isLibrary) have no Sonos-usable container id —
+        // the library API's p.xxx id resolves to the wrong content on Sonos — so expand them into
+        // individual catalog tracks, each of which has a valid catalog song id.
+        if playlist.isLibrary {
+            await appendAppleMusicLibraryPlaylist(playlist)
+        } else {
+            await appendAppleMusic(.playlist(playlist))
+        }
+    }
+
+    /// Enqueues an un-mirrored library playlist by adding its catalog-resolvable tracks one by one.
+    private func appendAppleMusicLibraryPlaylist(_ playlist: AppleMusicPlaylist) async {
+        guard let creds = appleMusicCredentials,
+              let controller = activeController,
+              let device = deviceManager.activeDevice,
+              let group = deviceManager.group(for: device.uuid) else { return }
+        let tracks: [AppleMusicTrack]
+        do {
+            tracks = try await musicDiscovery.playlistTracks(playlistId: playlist.id)
+        } catch {
+            appleMusicError = "Couldn't load this playlist's tracks. Try again."
+            return
+        }
+        let playable = tracks.filter { Int($0.id) != nil }   // catalog-resolvable tracks only
+        guard !playable.isEmpty else {
+            appleMusicError = "None of this playlist's tracks are available to stream on Sonos."
+            return
+        }
+        appleMusicError = nil
+        var firstTrackNumber = 0
+        do {
+            for (index, track) in playable.enumerated() {
+                let pos = try await controller.addToQueue(
+                    uri: AppleMusicURIs.trackURI(id: track.id, sn: creds.sn),
+                    metadata: AppleMusicURIs.didl(for: .track(track), credentials: creds)
+                )
+                if index == 0 { firstTrackNumber = pos }
+            }
+        } catch {
+            clearAppleMusicCredentials()
+            appleMusicError = "Couldn't add to queue. Favorite an Apple Music item in the Sonos app to refresh credentials."
+            return
+        }
+        await startQueuePlaybackIfIdle(firstTrackNumber: firstTrackNumber,
+                                       coordinatorUUID: group.coordinatorUUID, controller: controller)
     }
 
     private func appendAppleMusic(_ item: AppleMusicPlayable) async {
@@ -1322,7 +1367,7 @@ final class AppState {
 
         appleMusicError = nil
 
-        // Phase 1: add to queue. If this throws, credentials are likely stale.
+        // Add to queue. If this throws, credentials are likely stale.
         let firstTrackNumber: Int
         do {
             firstTrackNumber = try await controller.addToQueue(uri: uri, metadata: didl)
@@ -1334,31 +1379,25 @@ final class AppState {
             #endif
             return
         }
+        await startQueuePlaybackIfIdle(firstTrackNumber: firstTrackNumber,
+                                       coordinatorUUID: group.coordinatorUUID, controller: controller)
+    }
 
-        // Phase 2: if the speaker is already playing from its queue, leave it alone —
-        // the user is building a queue while something else plays. Otherwise, make sure
-        // the transport is pointed at the queue, then seek to the newly inserted track
-        // and start playing.
+    /// If the speaker isn't already playing from its queue, point the transport at the queue,
+    /// seek to the newly enqueued track, and start playback. No-op when the speaker is already
+    /// playing from the queue (the user is intentionally building a queue).
+    private func startQueuePlaybackIfIdle(firstTrackNumber: Int, coordinatorUUID: String, controller: PlaybackController) async {
         guard firstTrackNumber > 0 else { return }
-
         let state = (try? await controller.getTransportState()) ?? .stopped
         let mediaInfo = try? await controller.getMediaInfo()
         let isOnQueue = mediaInfo?.uri.hasPrefix("x-rincon-queue:") ?? false
-
-        if state == .playing && isOnQueue {
-            return  // Don't interrupt active playback.
-        }
-
+        if state == .playing && isOnQueue { return }  // Don't interrupt active playback.
         do {
             if !isOnQueue {
-                // Speaker is pointed at TV/radio/other source — switch to the queue.
-                let queueURI = "x-rincon-queue:\(group.coordinatorUUID)#0"
-                try await controller.playURI(queueURI, metadata: "")
+                try await controller.playURI("x-rincon-queue:\(coordinatorUUID)#0", metadata: "")
             }
             try await controller.seekToTrack(firstTrackNumber)
-            if state != .playing {
-                try await controller.play()
-            }
+            if state != .playing { try await controller.play() }
             await refreshPlayback()
         } catch {
             appleMusicError = "Added to queue, but playback didn't start. Try again."

@@ -54,32 +54,46 @@ public final class MusicKitDiscoveryProvider: MusicDiscoveryProviding, @unchecke
 
     public func libraryPlaylists() async throws -> [AppleMusicPlaylist] {
         do {
-            let response = try await MusicLibraryRequest<Playlist>().response()
-            return response.items.map(Self.playlist(from:))
+            let data = try await Self.libraryAPIData("/v1/me/library/playlists?limit=100")
+            return AppleMusicLibraryAPIParser.playlists(from: data)
         } catch { throw AppleMusicError.networkError }
+    }
+
+    /// Performs a raw Apple Music library API GET via MusicKit's authenticated transport.
+    private static func libraryAPIData(_ path: String) async throws -> Data {
+        guard let url = URL(string: "https://api.music.apple.com" + path) else {
+            throw AppleMusicError.invalidResponse
+        }
+        return try await MusicDataRequest(urlRequest: URLRequest(url: url)).response().data
     }
 
     public func libraryAlbums() async throws -> [AppleMusicAlbum] {
         do {
             let response = try await MusicLibraryRequest<Album>().response()
-            return response.items.map(Self.album(from:))
+            return await Self.enrichArtwork(response.items.map(Self.album(from:)))
         } catch { throw AppleMusicError.networkError }
     }
 
     public func librarySongs() async throws -> [AppleMusicTrack] {
         do {
             let response = try await MusicLibraryRequest<Song>().response()
-            return response.items.map(Self.track(from:))
+            return await Self.enrichArtwork(response.items.map(Self.track(from:)))
         } catch { throw AppleMusicError.networkError }
     }
 
     public func playlistTracks(playlistId: String) async throws -> [AppleMusicTrack] {
         do {
-            var request = MusicLibraryRequest<Playlist>()
-            request.filter(matching: \.id, equalTo: MusicItemID(playlistId))
-            guard let playlist = try await request.response().items.first else { return [] }
-            let detailed = try await playlist.with([.tracks])
-            return (detailed.tracks ?? []).compactMap(Self.track(from:))
+            if playlistId.hasPrefix("pl.") {
+                // Mirrored playlist → catalog tracks (catalog song ids, https art).
+                let request = MusicCatalogResourceRequest<Playlist>(matching: \.id, equalTo: MusicItemID(playlistId))
+                guard let playlist = try await request.response().items.first else { return [] }
+                let detailed = try await playlist.with([.tracks])
+                return (detailed.tracks ?? []).compactMap(Self.track(from:))
+            } else {
+                // Library-only playlist (p.xxx) → library API tracks.
+                let data = try await Self.libraryAPIData("/v1/me/library/playlists/\(playlistId)/tracks?limit=100")
+                return AppleMusicLibraryAPIParser.tracks(from: data)
+            }
         } catch { throw AppleMusicError.networkError }
     }
 
@@ -111,7 +125,7 @@ public final class MusicKitDiscoveryProvider: MusicDiscoveryProviding, @unchecke
             album: song.albumTitle,
             // MusicKit doesn't expose an album id on Song without an extra .with([.albums]) fetch
             albumId: nil,
-            artworkURL: song.artwork?.url(width: 600, height: 600),
+            artworkURL: httpsArt(song.artwork?.url(width: 600, height: 600)),
             durationSec: song.duration.map { Int($0) }
         )
     }
@@ -125,23 +139,17 @@ public final class MusicKitDiscoveryProvider: MusicDiscoveryProviding, @unchecke
     }
 
     private static func album(from album: Album) -> AppleMusicAlbum {
-        AppleMusicAlbum(
-            id: album.id.rawValue,
+        // Like playlists, a library album's MusicKit id is a library id Sonos can't use; the
+        // catalog album id (numeric) lives in playParameters. Resolving it fixes both artwork
+        // enrichment and Sonos playback (x-rincon-cpcontainer:1004206calbum%3a<catalogId>).
+        let ppData = album.playParameters.flatMap { try? playParamsEncoder.encode($0) }
+        let catalogId = AppleMusicCatalogIDResolver.catalogID(playParametersJSON: ppData)
+        return AppleMusicAlbum(
+            id: catalogId ?? album.id.rawValue,
             title: album.title,
             artist: album.artistName,
-            artworkURL: album.artwork?.url(width: 600, height: 600),
+            artworkURL: httpsArt(album.artwork?.url(width: 600, height: 600)),
             trackCount: album.trackCount
-        )
-    }
-
-    private static func playlist(from playlist: Playlist) -> AppleMusicPlaylist {
-        AppleMusicPlaylist(
-            id: playlist.id.rawValue,
-            name: playlist.name,
-            curatorName: playlist.curatorName,
-            artworkURL: playlist.artwork?.url(width: 600, height: 600),
-            trackCount: nil,
-            isLibrary: true  // only library playlists are fetched here
         )
     }
 
@@ -152,5 +160,47 @@ public final class MusicKitDiscoveryProvider: MusicDiscoveryProviding, @unchecke
         guard let pp = song.playParameters,
               let data = try? playParamsEncoder.encode(pp) else { return nil }
         return AppleMusicCatalogIDResolver.catalogID(playParametersJSON: data)
+    }
+
+    // MARK: - Artwork
+
+    /// MusicKit returns `musicKit://` URLs for library-item artwork, which a plain image view
+    /// can't load. Keep only http(s) URLs (catalog artwork); library art is filled in by the
+    /// catalog-lookup enrichers below.
+    private static func httpsArt(_ url: URL?) -> URL? {
+        guard let scheme = url?.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        return url
+    }
+
+    /// Fetches https artwork for catalog albums by numeric id (one batched request).
+    static func enrichArtwork(_ albums: [AppleMusicAlbum]) async -> [AppleMusicAlbum] {
+        let ids = albums.filter { $0.artworkURL == nil && Int($0.id) != nil }.map(\.id)
+        guard !ids.isEmpty,
+              let resp = try? await MusicCatalogResourceRequest<Album>(matching: \.id, memberOf: ids.map { MusicItemID($0) }).response()
+        else { return albums }
+        var art: [String: URL] = [:]
+        for a in resp.items { if let u = a.artwork?.url(width: 600, height: 600) { art[a.id.rawValue] = u } }
+        guard !art.isEmpty else { return albums }
+        return albums.map { a in
+            guard let u = art[a.id] else { return a }
+            return AppleMusicAlbum(id: a.id, title: a.title, artist: a.artist,
+                                   artworkURL: u, trackCount: a.trackCount)
+        }
+    }
+
+    /// Fetches https artwork for catalog songs by numeric id (one batched request).
+    static func enrichArtwork(_ tracks: [AppleMusicTrack]) async -> [AppleMusicTrack] {
+        let ids = tracks.filter { $0.artworkURL == nil && Int($0.id) != nil }.map(\.id)
+        guard !ids.isEmpty,
+              let resp = try? await MusicCatalogResourceRequest<Song>(matching: \.id, memberOf: ids.map { MusicItemID($0) }).response()
+        else { return tracks }
+        var art: [String: URL] = [:]
+        for s in resp.items { if let u = s.artwork?.url(width: 600, height: 600) { art[s.id.rawValue] = u } }
+        guard !art.isEmpty else { return tracks }
+        return tracks.map { t in
+            guard let u = art[t.id] else { return t }
+            return AppleMusicTrack(id: t.id, title: t.title, artist: t.artist, album: t.album,
+                                   albumId: t.albumId, artworkURL: u, durationSec: t.durationSec)
+        }
     }
 }
