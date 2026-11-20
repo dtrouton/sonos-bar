@@ -228,8 +228,6 @@ final class AppState {
         contentItems = []
         contentError = nil
         isBrowseLoading = false
-        sleepTimerRemaining = nil
-        sleepTimerEndDate = nil
         lastMediaURI = nil
         lastTrackURI = nil
         mediaKeyController.updateNowPlaying(track: nil, transportState: .stopped)
@@ -493,80 +491,236 @@ final class AppState {
 
     // MARK: - Alarms & Sleep Timer
 
-    var alarms: [SonosAlarm] = []
-    var sleepTimerRemaining: String? = nil
-    /// Computed end date for local countdown — set from API remaining time.
-    var sleepTimerEndDate: Date? = nil
+    private enum AlarmAction {
+        case refresh
+        case setEnabled(SonosAlarm, Bool)
+        case delete(SonosAlarm)
 
-    func fetchAlarms() async {
-        guard let client = activeClient else { return }
-        alarms = (try? await AlarmScheduler.listAlarms(client: client)) ?? []
+        var failureMessage: String {
+            switch self {
+            case .refresh: return "Couldn't load alarms."
+            case .setEnabled: return "Couldn't change the alarm."
+            case .delete: return "Couldn't delete the alarm."
+            }
+        }
     }
 
-    func createAlarm(_ alarm: SonosAlarm) async {
-        guard let client = activeClient else { return }
-        try? await AlarmScheduler.createAlarm(client: client, alarm: alarm)
+    private(set) var alarms: [SonosAlarm] = []
+    private(set) var isUpdatingAlarms = false
+    private(set) var alarmError: String?
+    private var failedAlarmAction: AlarmAction?
+
+    private var alarmClient: SOAPClient? {
+        if let activeClient { return activeClient }
+        return deviceManager.devices.first(where: { !$0.ip.isEmpty }).map { SOAPClient(host: $0.ip) }
+    }
+
+    func fetchAlarms() async { await performAlarmAction(.refresh) }
+
+    func reloadAlarmsIfNeeded() async {
+        guard failedAlarmAction == nil else { return }
         await fetchAlarms()
     }
 
-    func toggleAlarm(_ alarm: SonosAlarm) async {
-        guard let client = activeClient else { return }
-        let toggled = SonosAlarm(
-            id: alarm.id,
-            startLocalTime: alarm.startLocalTime,
-            recurrence: alarm.recurrence,
-            roomUUID: alarm.roomUUID,
-            programURI: alarm.programURI,
-            programMetaData: alarm.programMetaData,
-            playMode: alarm.playMode,
-            volume: alarm.volume,
-            duration: alarm.duration,
-            enabled: !alarm.enabled,
-            includeLinkedZones: alarm.includeLinkedZones
-        )
-        try? await AlarmScheduler.updateAlarm(client: client, alarm: toggled)
-        await fetchAlarms()
+    func retryAlarmAction() async {
+        guard let action = failedAlarmAction else { return }
+        await performAlarmAction(action, isRetry: true)
+    }
+
+    func createAlarm(_ attempt: inout AlarmScheduler.CreationAttempt) async throws {
+        guard let client = alarmClient(for: attempt.alarm.roomUUID) else { throw AlarmSaveError.roomUnavailable }
+        guard !isUpdatingAlarms else { throw AlarmSaveError.busy }
+        isUpdatingAlarms = true
+        defer { isUpdatingAlarms = false }
+        try await attempt.save(client: client)
+        do {
+            alarms = try await AlarmScheduler.listAlarms(client: client)
+            alarmError = nil
+            failedAlarmAction = nil
+        } catch {
+            // Sonos confirmed creation. Retry the read separately from the write.
+            alarmError = "Alarm saved. Couldn't refresh the alarm list. \(scheduleErrorDetail(error))"
+            failedAlarmAction = .refresh
+        }
+    }
+
+    func updateAlarm(_ alarm: SonosAlarm) async throws {
+        guard !alarm.id.isEmpty else { throw AlarmSaveError.alarmUnavailable }
+        guard let client = alarmClient(for: alarm.roomUUID) ?? alarmClient else { throw AlarmSaveError.roomUnavailable }
+        guard !isUpdatingAlarms else { throw AlarmSaveError.busy }
+        isUpdatingAlarms = true
+        defer { isUpdatingAlarms = false }
+        try await AlarmScheduler.updateAlarm(client: client, alarm: alarm)
+        if let index = alarms.firstIndex(where: { $0.id == alarm.id }) {
+            alarms[index] = alarm
+        }
+        alarmError = nil
+        failedAlarmAction = nil
+    }
+
+    private func alarmClient(for roomUUID: String) -> SOAPClient? {
+        deviceManager.devices
+            .first { $0.uuid == roomUUID && !$0.ip.isEmpty }
+            .map { SOAPClient(host: $0.ip) }
+    }
+
+    private enum AlarmSaveError: LocalizedError {
+        case roomUnavailable
+        case alarmUnavailable
+        case busy
+
+        var errorDescription: String? {
+            switch self {
+            case .roomUnavailable: return "Choose an available Sonos room."
+            case .alarmUnavailable: return "Refresh alarms and try again."
+            case .busy: return "Wait for the current alarm request to finish."
+            }
+        }
+    }
+
+    func setAlarmEnabled(_ alarm: SonosAlarm, enabled: Bool) async {
+        await performAlarmAction(.setEnabled(alarm, enabled))
     }
 
     func deleteAlarm(_ alarm: SonosAlarm) async {
-        guard let client = activeClient else { return }
-        try? await AlarmScheduler.deleteAlarm(client: client, id: alarm.id)
-        await fetchAlarms()
+        await performAlarmAction(.delete(alarm))
     }
 
-    func setSleepTimer(minutes: Int) async {
-        guard let client = activeClient, let controller = activeController else { return }
-        guard (try? await SleepTimerController.setSleepTimer(client: client, minutes: minutes)) != nil,
-              activeController === controller else { return }
-        // Set end date immediately — don't rely on a second SOAP round-trip
-        sleepTimerEndDate = Date.now.addingTimeInterval(TimeInterval(minutes * 60))
-        sleepTimerRemaining = String(format: "%02d:%02d:00", minutes / 60, minutes % 60)
-    }
-
-    func cancelSleepTimer() async {
-        guard let client = activeClient, let controller = activeController else { return }
-        guard (try? await SleepTimerController.cancelSleepTimer(client: client)) != nil,
-              activeController === controller else { return }
-        sleepTimerRemaining = nil
-        sleepTimerEndDate = nil
-    }
-
-    func refreshSleepTimer() async {
-        guard let client = activeClient, let controller = activeController else { return }
+    private func performAlarmAction(_ action: AlarmAction, isRetry: Bool = false) async {
+        guard !isUpdatingAlarms else { return }
+        guard let client = alarmClient else {
+            alarmError = "No Sonos speaker is available."
+            failedAlarmAction = action
+            return
+        }
+        isUpdatingAlarms = true
+        alarmError = nil
+        failedAlarmAction = nil
+        defer { isUpdatingAlarms = false }
         do {
-            let remaining = try await SleepTimerController.getRemainingTime(client: client)
-            guard activeController === controller else { return }
-            sleepTimerRemaining = remaining
-            if let remaining {
-                let seconds = parseSleepTime(remaining)
-                sleepTimerEndDate = seconds > 0 ? Date.now.addingTimeInterval(TimeInterval(seconds)) : nil
-            } else {
-                // API succeeded but no timer active
-                sleepTimerEndDate = nil
+            switch action {
+            case .refresh:
+                alarms = try await AlarmScheduler.listAlarms(client: client)
+            case .setEnabled(let alarm, let enabled):
+                if isRetry {
+                    alarms = try await AlarmScheduler.listAlarms(client: client)
+                }
+                guard let current = alarms.first(where: { $0.id == alarm.id }),
+                      current.enabled != enabled else { return }
+                let updated = current.updating(enabled: enabled)
+                try await AlarmScheduler.updateAlarm(client: client, alarm: updated)
+                if let index = alarms.firstIndex(where: { $0.id == alarm.id }) { alarms[index] = updated }
+            case .delete(let alarm):
+                if isRetry {
+                    alarms = try await AlarmScheduler.listAlarms(client: client)
+                    guard alarms.contains(where: { $0.id == alarm.id }) else { return }
+                }
+                try await AlarmScheduler.deleteAlarm(client: client, id: alarm.id)
+                alarms.removeAll { $0.id == alarm.id }
             }
         } catch {
-            // API call failed — keep existing values rather than clearing
+            guard !Task.isCancelled else { return }
+            alarmError = "\(action.failureMessage) \(scheduleErrorDetail(error))"
+            failedAlarmAction = action
         }
+    }
+
+    private enum SleepTimerAction {
+        case refresh
+        case set(Int)
+        case cancel
+
+        var failureMessage: String {
+            switch self {
+            case .refresh: return "Couldn't check the sleep timer."
+            case .set: return "Couldn't set the sleep timer."
+            case .cancel: return "Couldn't cancel the sleep timer."
+            }
+        }
+    }
+
+    private struct SleepTimerState {
+        var endDate: Date?
+        var isUpdating = false
+        var failedAction: SleepTimerAction?
+        var error: String?
+    }
+
+    private var sleepTimers: [String: SleepTimerState] = [:]
+
+    private var activeSleepTimerGroup: ZoneGroup? {
+        deviceManager.activeDevice.flatMap { deviceManager.group(for: $0.uuid) }
+    }
+
+    private var activeSleepTimerState: SleepTimerState? {
+        activeSleepTimerGroup.flatMap { sleepTimers[$0.coordinatorUUID] }
+    }
+
+    var sleepTimerRoomName: String? {
+        guard let device = deviceManager.activeDevice, let group = activeSleepTimerGroup else { return nil }
+        return group.isStandalone ? device.roomName : "\(device.roomName) group"
+    }
+
+    var sleepTimerEndDate: Date? { activeSleepTimerState?.endDate }
+    var sleepTimerError: String? { activeSleepTimerState?.error }
+    var isUpdatingSleepTimer: Bool { activeSleepTimerState?.isUpdating == true }
+
+    func setSleepTimer(minutes: Int) async { await performSleepTimerAction(.set(minutes)) }
+    func cancelSleepTimer() async { await performSleepTimerAction(.cancel) }
+
+    func refreshSleepTimer() async {
+        guard activeSleepTimerState?.failedAction == nil else { return }
+        await performSleepTimerAction(.refresh)
+    }
+
+    func retrySleepTimer() async {
+        guard let action = activeSleepTimerState?.failedAction else { return }
+        await performSleepTimerAction(action)
+    }
+
+    private func performSleepTimerAction(_ action: SleepTimerAction) async {
+        guard let group = activeSleepTimerGroup, let client = activeClient else { return }
+        let room = group.coordinatorUUID
+        guard sleepTimers[room]?.isUpdating != true else { return }
+        sleepTimers[room, default: SleepTimerState()].isUpdating = true
+        sleepTimers[room]?.error = nil
+        sleepTimers[room]?.failedAction = nil
+        defer { sleepTimers[room]?.isUpdating = false }
+
+        do {
+            switch action {
+            case .refresh:
+                let remaining = try await SleepTimerController.getRemainingTime(client: client)
+                let seconds = remaining.map(parseSleepTime) ?? 0
+                sleepTimers[room]?.endDate = seconds > 0 ? Date.now.addingTimeInterval(TimeInterval(seconds)) : nil
+            case .set(let minutes):
+                try await SleepTimerController.setSleepTimer(client: client, minutes: minutes)
+                sleepTimers[room]?.endDate = Date.now.addingTimeInterval(TimeInterval(minutes * 60))
+            case .cancel:
+                try await SleepTimerController.cancelSleepTimer(client: client)
+                sleepTimers[room]?.endDate = nil
+            }
+        } catch {
+            sleepTimers[room]?.error = "\(action.failureMessage) \(scheduleErrorDetail(error))"
+            sleepTimers[room]?.failedAction = action
+        }
+    }
+
+    func scheduleErrorDetail(_ error: Error) -> String {
+        if let error = error as? URLError {
+            switch error.code {
+            case .timedOut:
+                return "Sonos didn't respond in time."
+            case .cannotConnectToHost, .cannotFindHost, .notConnectedToInternet, .networkConnectionLost:
+                return "Check that the speaker and your Mac are on the same network."
+            default:
+                break
+            }
+        }
+        if let error = error as? SOAPError {
+            return error.code > 0 ? "Sonos returned error \(error.code)." : error.message
+        }
+        return error.localizedDescription
     }
 
     /// Returns true if the URI can be replayed via SetAVTransportURI.

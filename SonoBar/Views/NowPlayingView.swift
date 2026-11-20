@@ -242,55 +242,12 @@ struct NowPlayingView: View {
                 Button(action: { performNext() }) {
                     Image(systemName: "forward.fill").font(.system(size: 16))
                 }
-                Menu {
-                    ForEach([15, 30, 45, 60], id: \.self) { mins in
-                        Button("\(mins) minutes") {
-                            Task { await appState.setSleepTimer(minutes: mins) }
-                        }
-                    }
-                    if appState.sleepTimerEndDate != nil {
-                        Divider()
-                        Button("Cancel Timer", role: .destructive) {
-                            Task { await appState.cancelSleepTimer() }
-                        }
-                    }
-                } label: {
-                    Image(systemName: appState.sleepTimerEndDate != nil ? "moon.fill" : "moon")
-                        .font(.system(size: 14))
-                        .foregroundColor(appState.sleepTimerEndDate != nil ? .accentColor : .primary)
-                }
+                sleepTimerMenu
             }
             .buttonStyle(.plain)
             .padding(.vertical, 8)
 
-            // Sleep timer countdown
-            if let endDate = appState.sleepTimerEndDate, endDate > .now {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let remaining = max(0, Int(endDate.timeIntervalSince(context.date)))
-                    if remaining > 0 {
-                        HStack(spacing: 6) {
-                            Image(systemName: "moon.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(.accentColor)
-                            Text(formatCountdown(remaining))
-                                .font(.system(size: 11).monospacedDigit())
-                                .foregroundColor(.secondary)
-                            Button {
-                                Task { await appState.cancelSleepTimer() }
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.accentColor.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                }
-            }
+            sleepTimerStatus
 
             Spacer(minLength: 0)
 
@@ -344,6 +301,86 @@ struct NowPlayingView: View {
             if !isScrubbing {
                 scrubProgress = newValue
             }
+        }
+    }
+
+    private var sleepTimerMenu: some View {
+        let target = appState.sleepTimerRoomName
+        let hasTimer = appState.sleepTimerEndDate.map { $0 > .now } ?? false
+        return Menu {
+            if let target { Text("Sleep timer for \(target)") }
+            ForEach([15, 30, 45, 60], id: \.self) { minutes in
+                Button("\(minutes) minutes") {
+                    Task { await appState.setSleepTimer(minutes: minutes) }
+                }
+            }
+            if hasTimer {
+                Divider()
+                Button("Cancel Timer", role: .destructive) {
+                    Task { await appState.cancelSleepTimer() }
+                }
+            }
+        } label: {
+            Image(systemName: hasTimer ? "moon.fill" : "moon")
+                .font(.system(size: 14))
+                .foregroundColor(hasTimer ? .accentColor : .primary)
+        }
+        .disabled(target == nil || appState.isUpdatingSleepTimer)
+        .help(target.map { "Sleep timer for \($0)" } ?? "Choose a room for the sleep timer")
+        .accessibilityLabel("Sleep timer")
+        .accessibilityValue(target ?? "No room selected")
+    }
+
+    @ViewBuilder
+    private var sleepTimerStatus: some View {
+        if let target = appState.sleepTimerRoomName {
+            VStack(spacing: 4) {
+                if let endDate = appState.sleepTimerEndDate, endDate > .now {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let remaining = max(0, Int(endDate.timeIntervalSince(context.date)))
+                        if remaining > 0 {
+                            HStack(spacing: 6) {
+                                Image(systemName: "moon.fill")
+                                    .foregroundStyle(Color.accentColor)
+                                Text(target).lineLimit(1)
+                                Text(formatCountdown(remaining)).monospacedDigit()
+                                Button {
+                                    Task { await appState.cancelSleepTimer() }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Cancel sleep timer for \(target)")
+                                .disabled(appState.isUpdatingSleepTimer)
+                            }
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Color.accentColor.opacity(0.1), in: Capsule())
+                        }
+                    }
+                }
+
+                if appState.isUpdatingSleepTimer {
+                    ProgressView("Contacting \(target)…")
+                        .controlSize(.small)
+                } else if let error = appState.sleepTimerError {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(target).fontWeight(.medium)
+                            Text(error).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 4)
+                        Button("Retry") { Task { await appState.retrySleepTimer() } }
+                            .controlSize(.small)
+                    }
+                    .font(.system(size: 11))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding(.horizontal, 12)
         }
     }
 

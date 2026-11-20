@@ -4,6 +4,42 @@ import Foundation
 
 /// Manages Sonos alarms via the AlarmClock UPnP service.
 public enum AlarmScheduler {
+    /// Retains a baseline so retrying an unconfirmed save can recognize an alarm Sonos already created.
+    public struct CreationAttempt {
+        public let alarm: SonosAlarm
+        private var knownIDs: Set<String>?
+
+        public init(alarm: SonosAlarm) {
+            self.alarm = alarm
+        }
+
+        public mutating func save(client: SOAPClient) async throws {
+            let existing = try await AlarmScheduler.listAlarms(client: client)
+            if let knownIDs, existing.contains(where: { !knownIDs.contains($0.id) && matches($0) }) {
+                return
+            }
+            knownIDs = Set(existing.map(\.id))
+            do {
+                try await AlarmScheduler.createAlarm(client: client, alarm: alarm)
+            } catch let error as SOAPError where error.code >= 600 {
+                knownIDs = nil
+                throw error
+            }
+        }
+
+        private func matches(_ existing: SonosAlarm) -> Bool {
+            existing.roomUUID == alarm.roomUUID &&
+                existing.startLocalTime == alarm.startLocalTime &&
+                existing.recurrence == alarm.recurrence &&
+                existing.duration == alarm.duration &&
+                existing.enabled == alarm.enabled &&
+                existing.programURI == alarm.programURI &&
+                existing.programMetaData == alarm.programMetaData &&
+                existing.playMode == alarm.playMode &&
+                existing.volume == alarm.volume &&
+                existing.includeLinkedZones == alarm.includeLinkedZones
+        }
+    }
 
     /// Lists all alarms configured on the Sonos system.
     public static func listAlarms(client: SOAPClient) async throws -> [SonosAlarm] {
@@ -12,7 +48,9 @@ public enum AlarmScheduler {
             action: "ListAlarms",
             params: [:]
         )
-        guard let alarmXML = result["CurrentAlarmList"] else { return [] }
+        guard let alarmXML = result["CurrentAlarmList"] else {
+            throw SOAPError(code: -1, message: "Sonos returned no alarm list.")
+        }
         return try AlarmListParser.parse(alarmXML)
     }
 
@@ -92,7 +130,7 @@ private final class AlarmXMLDelegate: NSObject, XMLParserDelegate {
         guard elementName == "Alarm" else { return }
         let alarm = SonosAlarm(
             id: attr["ID"] ?? "",
-            startLocalTime: attr["StartLocalTime"] ?? "",
+            startLocalTime: attr["StartTime"] ?? attr["StartLocalTime"] ?? "",
             recurrence: attr["Recurrence"] ?? "DAILY",
             roomUUID: attr["RoomUUID"] ?? "",
             programURI: attr["ProgramURI"] ?? "",
