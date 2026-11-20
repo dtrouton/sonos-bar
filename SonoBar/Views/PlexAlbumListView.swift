@@ -8,7 +8,7 @@ struct PlexAlbumListView: View {
     let isLoading: Bool
     var onTap: (PlexAlbum) -> Void
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+    private let columns = [GridItem(.adaptive(minimum: 84, maximum: 120), spacing: 8)]
 
     var body: some View {
         VStack(spacing: 0) {

@@ -11,7 +11,8 @@ enum BrowseSegment: String, CaseIterable {
 
 struct BrowseView: View {
     @Environment(AppState.self) private var appState
-    @State private var segment: BrowseSegment = .recents
+    @Binding var isExpanded: Bool
+    @AppStorage("browseSource") private var segment: BrowseSegment = .recents
     @State private var searchText = ""
 
     private var filteredItems: [ContentItem] {
@@ -25,14 +26,11 @@ struct BrowseView: View {
     var body: some View {
         VStack(spacing: 0) {
             roomPicker
-            // Segment picker
-            Picker("", selection: $segment) {
-                ForEach(BrowseSegment.allCases, id: \.self) { seg in
-                    Text(seg.rawValue).tag(seg)
-                }
+            ViewThatFits(in: .horizontal) {
+                sourcePicker.pickerStyle(.segmented).fixedSize()
+                sourcePicker.pickerStyle(.segmented).controlSize(.mini).fixedSize()
+                sourcePicker.pickerStyle(.menu)
             }
-            .pickerStyle(.segmented)
-            .controlSize(.mini)
             .padding(.horizontal, 12)
             .padding(.top, 6)
             .padding(.bottom, 4)
@@ -48,6 +46,15 @@ struct BrowseView: View {
                 AppleMusicSearchView()
             }
         }
+    }
+
+    private var sourcePicker: some View {
+        Picker("Browse source", selection: $segment) {
+            ForEach(BrowseSegment.allCases, id: \.self) { source in
+                Text(source.rawValue).tag(source)
+            }
+        }
+        .labelsHidden()
     }
 
     private var roomPicker: some View {
@@ -85,6 +92,17 @@ struct BrowseView: View {
                     .accessibilityLabel("Grouped playback")
             }
             Spacer(minLength: 0)
+            Button {
+                isExpanded.toggle()
+            } label: {
+                Label(
+                    isExpanded ? "Compact" : "Expand",
+                    systemImage: isExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+                )
+            }
+            .controlSize(.small)
+            .fixedSize()
+            .help(isExpanded ? "Use compact Browse" : "Make Browse larger")
         }
         .font(.system(size: 11))
         .padding(.horizontal, 12)

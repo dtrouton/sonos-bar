@@ -7,6 +7,7 @@ import SonoBarKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
+    private var isBrowseExpanded = false
     private let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -18,12 +19,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 320, height: 450)
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(
-            rootView: PopoverContentView()
-                .environment(appState)
+        let hostingController = NSHostingController(
+            rootView: PopoverContentView { [weak self] expanded in
+                self?.isBrowseExpanded = expanded
+                self?.resizePopover()
+            }
+            .environment(appState)
         )
+        hostingController.sizingOptions = []
+        popover.contentViewController = hostingController
+        resizePopover()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenParametersChanged(_:)),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+
         Task {
             await appState.startDiscovery()
         }
@@ -35,12 +48,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.performClose(nil)
             appState.mediaKeyController.deactivate()
         } else {
+            resizePopover()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
             appState.mediaKeyController.activate(
                 track: appState.playbackState.currentTrack,
                 transportState: appState.playbackState.transportState
             )
+        }
+    }
+
+    @objc private func screenParametersChanged(_ notification: Notification) {
+        resizePopover()
+    }
+
+    private func resizePopover() {
+        let screen = statusItem.button?.window?.screen ?? NSScreen.main
+        let size = PopoverSizing.size(expandedBrowse: isBrowseExpanded, fitting: screen?.visibleFrame.size)
+        if popover.contentSize != size {
+            popover.contentSize = size
         }
     }
 }

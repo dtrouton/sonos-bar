@@ -6,8 +6,24 @@ enum Tab {
     case nowPlaying, rooms, browse, alarms
 }
 
+enum PopoverSizing {
+    static let compact = CGSize(width: 320, height: 480)
+    static let expanded = CGSize(width: 600, height: 680)
+
+    static func size(expandedBrowse: Bool, fitting visibleScreenSize: CGSize?) -> CGSize {
+        let preferred = expandedBrowse ? expanded : compact
+        let inset: CGFloat = 24
+        guard let screen = visibleScreenSize, screen.width > inset, screen.height > inset else { return preferred }
+        return CGSize(
+            width: min(preferred.width, screen.width - inset),
+            height: min(preferred.height, screen.height - inset)
+        )
+    }
+}
+
 struct PopoverContentView: View {
-    @Environment(AppState.self) private var appState
+    let onBrowseExpansionChange: (Bool) -> Void
+    @AppStorage("expandBrowsePopover") private var isBrowseExpanded = false
     @State private var selectedTab: Tab = .nowPlaying
 
     var body: some View {
@@ -19,7 +35,7 @@ struct PopoverContentView: View {
                 case .rooms:
                     RoomSwitcherView(onRoomSelected: { selectedTab = .nowPlaying })
                 case .browse:
-                    BrowseView()
+                    BrowseView(isExpanded: $isBrowseExpanded)
                 case .alarms:
                     AlarmsView()
                 }
@@ -36,7 +52,10 @@ struct PopoverContentView: View {
             .padding(.vertical, 8)
             .background(Color(nsColor: .controlBackgroundColor))
         }
-        .frame(width: 320, height: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: selectedTab == .browse && isBrowseExpanded, initial: true) { _, expanded in
+            onBrowseExpansionChange(expanded)
+        }
     }
 
     private func tabButton(tab: Tab, icon: String, label: String) -> some View {
@@ -51,5 +70,6 @@ struct PopoverContentView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
 }

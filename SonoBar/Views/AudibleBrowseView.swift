@@ -204,11 +204,7 @@ struct AudibleBrowseView: View {
     // MARK: - Book Grid
 
     private func bookGrid(books: [AudibleBook]) -> some View {
-        let columns = [
-            GridItem(.flexible(), spacing: 8),
-            GridItem(.flexible(), spacing: 8),
-            GridItem(.flexible(), spacing: 8),
-        ]
+        let columns = [GridItem(.adaptive(minimum: 84, maximum: 120), spacing: 8)]
         return ScrollView {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(books) { book in

@@ -7,7 +7,7 @@ struct ContentGridView: View {
     var onTap: (ContentItem) -> Void
     @Environment(AppState.self) private var appState
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+    private let columns = [GridItem(.adaptive(minimum: 84, maximum: 120), spacing: 8)]
 
     var body: some View {
         ScrollView {
